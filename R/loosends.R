@@ -372,7 +372,7 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
 
     ## correct p values
     message("Identifying true positives")
-    PTHRESH = 0.01
+    PTHRESH = 3.4e-7
     if(!("epgap" %in% colnames(le.class))){
         le.class[, passed := !is.na(p) & p < PTHRESH & estimate > (0.6*effect.thresh) & testimate > (0.6*effect.thresh) & waviness < 2 & nestimate < (0.6*effect.thresh)]
     }else le.class[, passed := !is.na(p) & p < PTHRESH & estimate > (0.6*effect.thresh) & testimate > (0.6*effect.thresh) & waviness < 2 & nestimate < (0.6*effect.thresh) & epgap < 1e-3]
