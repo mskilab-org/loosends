@@ -268,10 +268,11 @@ filter.graph = function(gg, cov.rds, field="ratio", verbose=F){
 #' @param purity optional, fractional purity of sample, default assumes 1
 #' @param ploidy optional, ploidy of sample, default infers from gg
 #' @param field optional, column name in cov.rds, default="ratio"
+#' @param PTHRESH optional, threshold for GLM p-value for calling true positive loose ends, default=3.4e-7 provides consanguinity with large dataset bonferroni correction
 #' @param verbose optional, default=FALSE
 #' @return data.table containing a row for every input loose end and logical column `true.pos` indicating whether each loose end has passed all filters (TRUE) or not (FALSE)
 #' @export
-filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio", verbose=F){
+filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio", PTHRESH=3.4e-7, verbose=F){
     ## load coverage and beta (coverage CN fit)
     if(verbose) message("Loading coverage bins")
     cov = readRDS(cov.rds)
@@ -372,7 +373,6 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
 
     ## correct p values
     message("Identifying true positives")
-    PTHRESH = 3.4e-7
     if(!("epgap" %in% colnames(le.class))){
         le.class[, passed := !is.na(p) & p < PTHRESH & estimate > (0.6*effect.thresh) & testimate > (0.6*effect.thresh) & waviness < 2 & nestimate < (0.6*effect.thresh)]
     }else le.class[, passed := !is.na(p) & p < PTHRESH & estimate > (0.6*effect.thresh) & testimate > (0.6*effect.thresh) & waviness < 2 & nestimate < (0.6*effect.thresh) & epgap < 1e-3]
