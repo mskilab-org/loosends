@@ -10,7 +10,8 @@ process.single.end(
   nbam = NULL,
   id = NULL,
   outdir = NULL,
-  ref_dir = system.file("extdata", "hg19_looseends", package = "loosends")
+  ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"),
+  verbose = FALSE
 )
 }
 \arguments{
@@ -30,6 +31,8 @@ leix.aligned.contigs.rds -- contains data.table of contig alignments
 leix.call.rds -- contains one row data.table describing categorization of provided loose end li (same as returned value)}
 
 \item{ref_dir}{optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'}
+
+\item{verbose}{optional, default=FALSE}
 }
 \value{
 one row data table describing categorization of provided loose end li

@@ -4,14 +4,27 @@
 \alias{filter.graph}
 \title{filter.graph}
 \usage{
-\method{filter}{graph}(gg, cov.rds, field = "ratio", verbose = F)
+filter.graph(
+  gg,
+  cov.rds,
+  purity = NULL,
+  ploidy = NULL,
+  field = "ratio",
+  verbose = F
+)
 }
 \arguments{
 \item{gg}{gGraph of JaBbA genome graph (contains loose ends)}
 
 \item{cov.rds}{character path to binned coverage data}
 
+\item{purity}{optional, fractional purity of sample, default assumes 1}
+
+\item{ploidy}{optional, ploidy of sample, default infers from gg}
+
 \item{field}{optional, default = "ratio", column in binned coverage data}
+
+\item{verbose}{optional, default=FALSE}
 }
 \value{
 data.table containing a row for every loose end in gGraph gg with a logical column \code{true.pos} indicating whether each loose end has passed all filters (TRUE) or not (FALSE)

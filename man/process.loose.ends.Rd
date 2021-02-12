@@ -11,7 +11,8 @@ process.loose.ends(
   id = NULL,
   outdir = NULL,
   mc.cores = 1,
-  ref_dir = system.file("extdata", "hg19_looseends", package = "loosends")
+  ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"),
+  verbose = FALSE
 )
 }
 \arguments{
@@ -28,6 +29,8 @@ process.loose.ends(
 \item{mc.cores}{optional, parallel cores for building contigs per loose end, default=1}
 
 \item{ref_dir}{optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'}
+
+\item{verbose}{optional, default=FALSE}
 }
 \description{
 this function categorizes an input set of loose ends

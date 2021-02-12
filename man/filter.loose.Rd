@@ -4,7 +4,7 @@
 \alias{filter.loose}
 \title{filter.loose}
 \usage{
-\method{filter}{loose}(
+filter.loose(
   gg,
   cov.rds,
   l,
