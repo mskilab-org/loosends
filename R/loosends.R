@@ -958,8 +958,14 @@ process.loose.ends = function(le, tbam, nbam=NULL, id=NULL, outdir=NULL, mc.core
     if(!file.exists(paste(ref_dir, "mskilab_combined_TraFicv8-3_satellites.fa", sep="/"))) stop("ref_dir must contain msilab_combined_TraFicv8-3_satellites.fa")
     if(!file.exists(paste(ref_dir, "PolyA.fa", sep="/"))) stop("ref_dir must contain PolyA.fa")
     if(!file.exists(paste(ref_dir, "human_g1k_v37.withviral.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37.withviral.fasta")
-
-    rbindlist(mclapply(1:nrow(le), function(i) process.single.end(le[i], tbam, nbam=nbam, id=id, outdir=outdir, ref_dir=ref_dir, verbose=verbose)[, i := i], mc.cores=mc.cores), fill=T, use.names=T)
+    if(!(length(tbam) == length(nbam) & length(nbam) == length(id))) stop("tbam, nbam, and id must all be length=1 or length=length(le)")
+    if(length(tbam) > 1 & length(tbam) != nrow(le)) stop("if tbam, nbam, and id are length>1, must be length(le)")
+    if(length(tbam)==1){
+        tbam = rep(tbam, nrow(le))
+        nbam = rep(nbam, nrow(le))
+        id = rep(id, nrow(le))
+    }
+    rbindlist(mclapply(1:nrow(le), function(i) process.single.end(le[i], tbam[i], nbam=nbam[i], id=id[i], outdir=outdir, ref_dir=ref_dir, verbose=verbose)[, i := i], mc.cores=mc.cores), fill=T, use.names=T)
 }
 
 #' process.single.end
