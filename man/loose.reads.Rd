@@ -9,9 +9,11 @@ loose.reads(
   tbam,
   pad = 25000,
   nbam = NULL,
-  ref = hg19,
+  ref = system.file("extdata", "hg19_looseends", "human_g1k_v37_decoy.fasta", package =
+    "loosends"),
   filter = TRUE,
-  gg = NULL
+  gg = NULL,
+  verbose = FALSE
 )
 }
 \arguments{
@@ -23,11 +25,13 @@ loose.reads(
 
 \item{nbam}{optional, character path to normal BAM file, default=NULL}
 
-\item{ref}{optional, BWA object of reference genome for realignment, default=hg19}
+\item{ref}{optional, BWA object of reference genome for realignment or path to fasta, default=package/extdata/hg19_looseends/human_g1k_v37_decoy.fasta}
 
 \item{filter}{optional, logical filter=TRUE returns loose read pairs only, filter=FALSE returns all read pairs annotated with logical $loose column, default=T}
 
 \item{gg}{optional, gGraph corresponding to sample, used to identify sequences fitted in graph, default=NULL}
+
+\item{verbose}{optional, default=FALSE}
 }
 \description{
 loads and reads and their mates from given windows and realigns single end for read-specific MAPQ

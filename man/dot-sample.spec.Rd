@@ -4,7 +4,7 @@
 \alias{.sample.spec}
 \title{.sample.spec}
 \usage{
-.sample.spec(le, bam, pad)
+.sample.spec(le, bam, pad, verbose = FALSE)
 }
 \arguments{
 \item{le}{GRanges or data.table of loose ends}
@@ -12,6 +12,8 @@
 \item{bam}{path to BAM file}
 
 \item{pad}{integer width of padding to add around loose ends}
+
+\item{verbose}{optional, default=FALSE}
 }
 \description{
 loads reads and mates for a single sample (tumor or normal)

@@ -11,6 +11,8 @@ ggraph.loose.ends(
   nbam = NULL,
   id = NULL,
   outdir = NULL,
+  purity = NULL,
+  ploidy = NULL,
   field = "ratio",
   verbose = F,
   mc.cores = 1,
@@ -29,6 +31,10 @@ ggraph.loose.ends(
 \item{id}{optional, character sample id, default=NULL}
 
 \item{outdir}{optional, character path to output directory, default=NULL (will not write output files if outdir=NULL)}
+
+\item{purity}{optional, fractional purity of sample, default assumes 1}
+
+\item{ploidy}{optional, ploidy of sample, default infers from gg}
 
 \item{field}{optional, name of informative column in cov.rds, default="ratio"}
 

@@ -4,7 +4,12 @@
 \alias{read.based}
 \title{read.based}
 \usage{
-read.based(li, ri, pad = NULL)
+read.based(
+  li,
+  ri,
+  pad = NULL,
+  ref_dir = system.file("extdata", "hg19_looseends", package = "loosends")
+)
 }
 \arguments{
 \item{li}{data.table loose end to classify}
@@ -12,6 +17,8 @@ read.based(li, ri, pad = NULL)
 \item{ri}{data.table read alignments}
 
 \item{pad}{optional, padding around loose end li to search for discordant reads, default=1e3}
+
+\item{ref_dir}{optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'}
 }
 \description{
 classifying loose end based on discordant read alignments by constructing pseudo-contigs based on consensus alignment patterns

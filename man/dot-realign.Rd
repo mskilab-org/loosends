@@ -4,7 +4,7 @@
 \alias{.realign}
 \title{.realign}
 \usage{
-.realign(reads, ref, gg = NULL, filter = TRUE)
+.realign(reads, ref, gg = NULL, filter = TRUE, verbose = F)
 }
 \arguments{
 \item{reads}{GRanges or data.table of reads from BAM file with $seq in original reading frame}
@@ -14,6 +14,8 @@
 \item{gg}{optional, gGraph of sample used to identify sequences fitted in graph, default=NULL}
 
 \item{filter}{optional, filter=TRUE will return loose read pairs only, filter=FALSE returns all, default=TRUE}
+
+\item{verbose}{optional, default=FALSE}
 }
 \description{
 realigns reads and their mates single-end to attach individual MAPQs
