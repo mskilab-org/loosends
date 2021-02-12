@@ -21,7 +21,7 @@ ggraph.loose.ends(gg = gG(jabba=/path/to/jabba.rds),
     verbose = F,
     mc.cores = 1,
     ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"))
-    ```
+```
 - will perform quality filters on fitted loose ends and evaluate all true positives
 - returns data.table describing the categorization and repeat content of each true positive loose end
 
@@ -37,7 +37,7 @@ process.loose.ends(le = GRanges(),
     mc.cores = 1, 
     ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"), 
     verbose = FALSE)
-    ```
+```
 - returns data.table describing the categorization and repeat content of every input loose end
 - tbam, nbam, and id must all either be length=1 (all loose ends from a single sample) or length=length(le)
 
