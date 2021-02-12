@@ -4,13 +4,14 @@
 \alias{filter.loose}
 \title{filter.loose}
 \usage{
-filter.loose(
+\method{filter}{loose}(
   gg,
   cov.rds,
   l,
   purity = NULL,
   ploidy = NULL,
   field = "ratio",
+  PTHRESH = 3.4e-07,
   verbose = F
 )
 }
@@ -26,6 +27,8 @@ filter.loose(
 \item{ploidy}{optional, ploidy of sample, default infers from gg}
 
 \item{field}{optional, column name in cov.rds, default="ratio"}
+
+\item{PTHRESH}{optional, threshold for GLM p-value for calling true positive loose ends, default=3.4e-7 provides consanguinity with large dataset bonferroni correction}
 
 \item{verbose}{optional, default=FALSE}
 }
