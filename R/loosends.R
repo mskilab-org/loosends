@@ -13,13 +13,13 @@ contig.support = function(reads, contig, ref = NULL, min.bases = 20, min.aligned
     if (length(contig) == 0) 
         stop("contig must be non empty GRanges with $qname, $cigar and $seq fields")
     seq = unique(gr2dt(contig), by = c("qname"))[, structure(as.character(seq), 
-        names = as.character(qname))]
+                                                             names = as.character(qname))]
     bwa.contig = RSeqLib::BWA(seq = seq)
     chunks = gChain::links(cg.contig)$x
     strand(chunks) = "+"
     chunks = disjoin(chunks)
     if(!("R1" %in% colnames(values(reads))))
-    reads$R1 = bamflag(reads$flag)[, "isFirstMateRead"] > 0
+        reads$R1 = bamflag(reads$flag)[, "isFirstMateRead"] > 0
     if (is.null(reads$AS)) {
         warning("AS not provided in reads, may want to consider using tag = \"AS\" argument to read.bam or provide a ref sequence to provide additional specificity to the contig support")
         reads$AS = 0
@@ -46,7 +46,7 @@ contig.support = function(reads, contig, ref = NULL, min.bases = 20, min.aligned
     readsc[, `:=`(nsplit, .N), by = .(qname, R1)]
     readsc[, `:=`(aligned, countCigar(cigar)[, "M"])]
     readsc[, `:=`(aligned.frac, aligned/qwidth[1]), by = .(qname, 
-        R1)]
+                                                           R1)]
     readsc$AS.og = reads$AS[readsc$ix]
     readsc$AS.og[is.na(readsc$AS.og)] = 0
     readsc$qname = reads$qname[readsc$ix]
@@ -54,16 +54,16 @@ contig.support = function(reads, contig, ref = NULL, min.bases = 20, min.aligned
     strand(ov) = readsc$strand[ov$query.id]
     ov$subject.id = paste0("chunk", ov$subject.id)
     ovagg = dcast.data.table(ov %>% gr2dt, qname ~ subject.id, 
-        value.var = "width", fun.aggregate = sum)
+                             value.var = "width", fun.aggregate = sum)
     ovagg$nchunks = rowSums(ovagg[, -1] > min.bases)
     rstats = gr2dt(ov)[, .(contig.id = unique(seqnames)[1], pos = sum(width[strand == 
-        "+"]), neg = sum(width[strand == "-"]), aligned.frac = min(aligned.frac), 
-        num.contigs = length(unique(seqnames)), isize.contig = diff(range(c(start, 
-            end))), qsplit = any(nsplit > 1), worse = any(AS.og > 
-            AS)), by = qname] %>% merge(ovagg, by = "qname")
+                                                                            "+"]), neg = sum(width[strand == "-"]), aligned.frac = min(aligned.frac), 
+                           num.contigs = length(unique(seqnames)), isize.contig = diff(range(c(start, 
+                                                                                               end))), qsplit = any(nsplit > 1), worse = any(AS.og > 
+                                                                                                                                             AS)), by = qname] %>% merge(ovagg, by = "qname")
     keepq = rstats[nchunks > 1 & (pos == 0 | neg == 0) & aligned.frac > 
-        min.aligned.frac & !worse & !qsplit & num.contigs == 
-        1, ]
+                   min.aligned.frac & !worse & !qsplit & num.contigs == 
+                   1, ]
     if (nrow(keepq) == 0) 
         return(reads[c()])
     keepq$aligned.frac = NULL
@@ -117,7 +117,7 @@ build.from.win = function(win, ri, tracks=NULL){
                 for(i in seq_along(contigsf)){
                     ctig = BWA(seq = contigsf[i])
                     ra = ctig[srf]
-                    sc = table(strand(ra))
+                    sc = table(factor(strand(ra), c("+", "-")))
                     if(!any(sc[1:2] == 0)) goodassembly[i] = FALSE
                     if(sc["+"] < sc["-"]) contigsf[i] = as.character(reverseComplement(DNAStringSet(contigsf[i])))
                 }
@@ -136,17 +136,17 @@ build.from.win = function(win, ri, tracks=NULL){
 #' @param subject DNAStringSet of sequences to parse for matches
 match.seq = function(query, subject)
 {
-  if (is.null(names(subject)))
-    names(subject) = 1:length(subject)
+    if (is.null(names(subject)))
+        names(subject) = 1:length(subject)
 
-  if (any(duplicated(names(subject))))
-  {
-    warning('Names of subject sequences have duplicates, deduping')
-    names(subject) = dedup(names(subject))
-  }
+    if (any(duplicated(names(subject))))
+    {
+        warning('Names of subject sequences have duplicates, deduping')
+        names(subject) = dedup(names(subject))
+    }
 
-  totals = lengths(vwhichPDict(query, subject)) > 0
-  return(totals)
+    totals = lengths(vwhichPDict(query, subject)) > 0
+    return(totals)
 }
 
 #' eighteenmer
@@ -199,6 +199,7 @@ munch = function(reads, query=NULL){
 #' @param gg gGraph of JaBbA genome graph (contains loose ends)
 #' @param cov.rds character path to binned coverage data
 #' @param field optional, default = "ratio", column in binned coverage data
+#' @param verbose optional, default=FALSE
 #' @return data.table containing a row for every loose end in gGraph gg with a logical column `true.pos` indicating whether each loose end has passed all filters (TRUE) or not (FALSE)
 #' @export
 filter.graph = function(gg, cov.rds, field="ratio", verbose=F){
@@ -206,7 +207,7 @@ filter.graph = function(gg, cov.rds, field="ratio", verbose=F){
     if(verbose) message("Identifying loose ends")
     ll = gr2dt(gr.start(gg$nodes[!is.na(cn) & loose.cn.left>0]$gr))[, ":="(lcn = loose.cn.left, strand = "+")]
     lr = gr2dt(gr.end(gg$nodes[!is.na(cn) & loose.cn.right>0]$gr))[, ":="(lcn = loose.cn.right, strand = "-")]
-    l = rbind(ll, lr)[, ":="(sample = id, filename=fi)]
+    l = rbind(ll, lr)
     l[, leix := 1:.N]
     l = dt2gr(l)
     if(verbose) message(sprintf("%s total loose ends in the graph", length(l)))
@@ -299,7 +300,7 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
     sides$wid = width(sides)
 
     ## gather coverage bins corresponding to fused & unfused sides of loose ends
-    message("Overlapping coverage with loose end fused and unfused sides")
+    if(verbose) message("Overlapping coverage with loose end fused and unfused sides")
     rel = gr.findoverlaps(cov, sides)
     values(rel) = cbind(values(cov[rel$query.id]), values(sides[rel$subject.id]))
     qq = 0.05
@@ -308,6 +309,7 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
                    good.cov=sum(is.na(tum.counts))/.N < 0.1 & sum(is.na(norm.counts))/.N < 0.1 & sum(is.na(ratio))/.N < 0.1 & wid > 5e4
                ), by=.(subject.id, fused)]
 
+    rel[, lxxx := leix]
     variances = rel[(in.quant.r), var(ratio), keyby=.(fused, lxxx)]
     variances[, side := ifelse(fused, "f_std", "u_std")]
     variances[, std := sqrt(V1)]
@@ -333,11 +335,11 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
 
     ## evaluate waviness across bins per loose end
     rel[, good.cov := all(good.cov), by=subject.id]
-    message("Calculating waviness around loose end")
+    if(verbose) message("Calculating waviness around loose end")
     rel[, waviness := max(.waviness(start[fused], ratio[fused]), .waviness(start[!fused], ratio[!fused]), na.rm=T), by=subject.id]
 
     ## prep glm input matrix
-    message("Prepping GLM input matrix")
+    if(verbose) message("Prepping GLM input matrix")
     glm.in = melt(rel[(in.quant.r),], id.vars=c("leix", "fused"), measure.vars=c("tum.counts", "norm.counts"), value.name="counts")[, tumor := variable=="tum.counts"]
     glm.in[, ix := 1:.N, by=leix]
     rel2 = copy(glm.in)
@@ -349,7 +351,7 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
     ## evaluate KS-test on residuals and calculate effect size
     ## effect will be from KS test on residuals
     ## estimate is replaced with difference of median coverage
-    message("Running KS-test on fused vs unfused sides of loose ends")
+    if(verbose) message("Running KS-test on fused vs unfused sides of loose ends")
     res = rel2[(tumor), tryCatch(dflm(ks.test(residual[fused], residual[!fused])), error=function(e) dflm(ks.test(residual, residual))), by=leix]
     est = rel2[, median(counts), keyby=.(fused, tumor, leix)][, V1[tumor] / V1[!tumor], keyby=.(leix, fused)][, V1[fused]-V1[!fused], keyby=leix]
     res$leix = as.character(res$leix); setkey(res, leix)
@@ -361,9 +363,7 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
     nest = rel2[!(tumor), mean(counts), keyby=.(fused, leix)][, V1[fused]-V1[!fused], keyby=leix]; setnames(nest, "V1", "nestimate")
     nest$leix = as.character(nest$leix); setkey(nest, leix)
     cnl = rev(rev(colnames(rel))[1:6])
-    message(cnl)
     cns = c("name", "method", "estimate", "effect", "p")
-    message(cns)
     le.class = cbind(gr2dt(l[rel[!duplicated(subject.id), subject.id]]), rel[!duplicated(subject.id), cnl, with=F], res[rel[!duplicated(subject.id), as.character(leix)], cns, with=F], nest[rel[!duplicated(subject.id), as.character(leix)], "nestimate"], test[rel[!duplicated(subject.id), as.character(leix)], "testimate"])[, effect.thresh := beta]
 
     le.class[, f.std := pt1[.(as.character(leix)), f_std]]
@@ -372,7 +372,7 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
     le.class[, bon := p.adjust(p, "bonferroni")]
 
     ## correct p values
-    message("Identifying true positives")
+    if(verbose) message("Identifying true positives")
     if(!("epgap" %in% colnames(le.class))){
         le.class[, passed := !is.na(p) & p < PTHRESH & estimate > (0.6*effect.thresh) & testimate > (0.6*effect.thresh) & waviness < 2 & nestimate < (0.6*effect.thresh)]
     }else le.class[, passed := !is.na(p) & p < PTHRESH & estimate > (0.6*effect.thresh) & testimate > (0.6*effect.thresh) & waviness < 2 & nestimate < (0.6*effect.thresh) & epgap < 1e-3]
@@ -418,6 +418,8 @@ return.dt = function(reference, complex, missedj, novel, mystery, insertion, ref
     if(mystery) call.string = paste(c(call.string, "mystery"), collapse="; ")
     if(is.null(refmap)) refmap = logical()
     if(is.null(novmap)) novmap = logical()
+    single.call = ifelse(complex, "complex rearrangement", ifelse(missedj, "missed junction", ifelse(reference & !(refmap), "seed repeat", ifelse(novel & !(novmap), "mate repeat", "mystery"))))
+    if(single.call == "mystery") mystery = TRUE
     data.table(seedrep=reference,
                complex=complex,
                missedj=missedj,
@@ -430,7 +432,8 @@ return.dt = function(reference, complex, missedj, novel, mystery, insertion, ref
                mate.repeats = freps,
                seed.mappable = refmap,
                mate.mappable = novmap,
-               call = call.string)
+               call = call.string,
+               category = single.call)
 }
 
 #' update.call
@@ -499,6 +502,8 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
     if(is.null(uannot)){
         uannot = readRDS(system.file('extdata', '101.unmappable.annotations.rds', package='loosends'))
     }
+    if(!file.exists(ref_dir)) stop("Provide correct ref_dir containing reference .fa files")
+    if(!file.exists(paste(ref_dir, "human_g1k_v37_decoy.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37_decoy.fasta")
     hg19 = BWA(fasta=paste(ref_dir, "human_g1k_v37_decoy.fasta", sep="/"))
     
     if(is.null(calns)) {
@@ -583,8 +588,8 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
     ## now that we're in contig coordinates, parse for telomeres
     out.dt = calns[!duplicated(qname)]
     setkey(out.dt, qname)
-    tgreps = find.telomeres(gqueries, out.dt)
-    tcreps = find.telomeres(cqueries, out.dt)
+    tgreps = find.telomeres(eighteenmer('g'), out.dt)
+    tcreps = find.telomeres(eighteenmer('c'), out.dt)
     if(!is.null(tgreps)) x = merge.telomeres(tgreps, x, ch, out.dt, c_spec="G telomere")
     if(!is.null(tcreps)) x = merge.telomeres(tcreps, x, ch, out.dt, c_spec="C telomere")
     ## viral calls overlapping telomere matches are ignored -- viral reference seqs include (TTAGGG)n
@@ -644,7 +649,7 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
         mystery = mystery | !any(missedj, complex, reference, novel)
         return(return.dt(reference, complex, missedj, novel, mystery, insertion, rrep=rrep, refmap=refmap, novmap=novmap))
     } else x = x2
-        
+    
 
     ## remember you won't always have caught the junction -- might just be the other side
     sections = disjoin(x)
@@ -834,7 +839,8 @@ gr.sum.strand = function(gr){
 #' @param li data.table loose end to classify
 #' @param ri data.table read alignments
 #' @param pad optional, padding around loose end li to search for discordant reads, default=1e3
-read.based = function(li, ri, pad=NULL){
+#' @param ref_dir optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'
+read.based = function(li, ri, pad=NULL, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends')){
     if(is.null(pad)) pad = 1e3
     t = ifelse(li$strand == "+", "sample.rev", "sample.for")
     ri = ri[rev(order(qwidth))][!duplicated(paste(R1, qname))]
@@ -885,7 +891,7 @@ read.based = function(li, ri, pad=NULL){
         out.dt$seq = character()
     }
 
-    dt = caller(li, out.dt[is.dup(qname)])
+    dt = caller(li, out.dt[is.dup(qname)], ref_dir=ref_dir)
     return(dt[, c("complex", "missedj")])
 }
 
@@ -919,11 +925,17 @@ transform = function(seq, s, e){
 #' @param ref_dir optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'
 #' @export
 ggraph.loose.ends = function(gg, cov.rds, tbam, nbam=NULL, id=NULL, outdir=NULL, field="ratio", verbose=F, mc.cores=1, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends')){
-    if(!is.null(outdir) & !file.exists(outdir)) {
-        tryCatch(readLines(pipe(paste("mkdir", outdir))), error = function(e) stop(paste("Provided output directory", outdir, "does not exist and cannot be made")))
-    }
+    if(!is.null(outdir)) if(!file.exists(outdir)) {
+                             tryCatch(readLines(pipe(paste("mkdir", outdir))), error = function(e) stop(paste("Provided output directory", outdir, "does not exist and cannot be made")))
+                         }
+    if(!file.exists(ref_dir)) stop("Provide correct ref_dir containing reference .fa files")
+    if(!file.exists(paste(ref_dir, "human_g1k_v37_decoy.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37_decoy.fasta")
+    if(!file.exists(paste(ref_dir, "mskilab_combined_TraFicv8-3_satellites.fa", sep="/"))) stop("ref_dir must contain msilab_combined_TraFicv8-3_satellites.fa")
+    if(!file.exists(paste(ref_dir, "PolyA.fa", sep="/"))) stop("ref_dir must contain PolyA.fa")
+    if(!file.exists(paste(ref_dir, "human_g1k_v37.withviral.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37.withviral.fasta")
+
     le.all = filter.graph(gg, cov.rds, field=field, verbose=verbose)
-    process.loose.ends(le.all[(true.pos)], tbam, nbam=nbam, id=id, outdir=outdir, mc.cores=mc.cores, ref_dir=ref_dir)
+    process.loose.ends(le.all[(true.pos)], tbam, nbam=nbam, id=id, outdir=outdir, mc.cores=mc.cores, ref_dir=ref_dir, verbose=verbose)
 }
 
 #' process.loose.ends
@@ -937,10 +949,17 @@ ggraph.loose.ends = function(gg, cov.rds, tbam, nbam=NULL, id=NULL, outdir=NULL,
 #' @param outdir optional, character path to output directory, default=NULL (will not write output files if outdir=NULL)
 #' @param mc.cores optional, parallel cores for building contigs per loose end, default=1
 #' @param ref_dir optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'
+#' @param verbose optional, default=FALSE
 #' @export
-process.loose.ends = function(le, tbam, nbam=NULL, id=NULL, outdir=NULL, mc.cores=1, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends')){
+process.loose.ends = function(le, tbam, nbam=NULL, id=NULL, outdir=NULL, mc.cores=1, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends'), verbose=FALSE){
     le = as.data.table(copy(le))
-    rbindlist(mclapply(1:nrow(le), function(i) process.single.end(le[i], tbam, nbam=nbam, id=id, outdir=outdir, ref_dir=ref_dir), mc.cores=mc.cores)[, i := i], fill=T, use.names=T)
+    if(!file.exists(ref_dir)) stop("Provide correct ref_dir containing reference .fa files")
+    if(!file.exists(paste(ref_dir, "human_g1k_v37_decoy.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37_decoy.fasta")
+    if(!file.exists(paste(ref_dir, "mskilab_combined_TraFicv8-3_satellites.fa", sep="/"))) stop("ref_dir must contain msilab_combined_TraFicv8-3_satellites.fa")
+    if(!file.exists(paste(ref_dir, "PolyA.fa", sep="/"))) stop("ref_dir must contain PolyA.fa")
+    if(!file.exists(paste(ref_dir, "human_g1k_v37.withviral.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37.withviral.fasta")
+
+    rbindlist(mclapply(1:nrow(le), function(i) process.single.end(le[i], tbam, nbam=nbam, id=id, outdir=outdir, ref_dir=ref_dir, verbose=verbose)[, i := i], mc.cores=mc.cores), fill=T, use.names=T)
 }
 
 #' process.single.end
@@ -959,28 +978,36 @@ process.loose.ends = function(le, tbam, nbam=NULL, id=NULL, outdir=NULL, mc.core
 #'         leix.aligned.contigs.rds -- contains data.table of contig alignments
 #'         leix.call.rds -- contains one row data.table describing categorization of provided loose end li (same as returned value)
 #' @param ref_dir optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'
+#' @param verbose optional, default=FALSE
 #' @return one row data table describing categorization of provided loose end li
 #' @export
-process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends')){
+process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends'), verbose=FALSE){
     li = as.data.table(copy(li))
+    message(gr.string(dt2gr(li)))
     if(nrow(li) > 1) stop("More than 1 loose end provided; did you mean 'process.loose.ends'?")
     if(nrow(li)==0) stop("0 loose ends provided")
-    if(!is.null(outdir) & !file.exists(outdir)) {
-        tryCatch(readLines(pipe(paste("mkdir", outdir))), error = function(e) stop(paste("Provided output directory", outdir, "does not exist and cannot be made")))
-    }
-
+    if(!is.null(outdir)) if(!file.exists(outdir)) {
+                             tryCatch(readLines(pipe(paste("mkdir", outdir))), error = function(e) stop(paste("Provided output directory", outdir, "does not exist and cannot be made")))
+                         }
+    if(!file.exists(ref_dir)) stop("Provide correct ref_dir containing reference .fa files")
+    if(!file.exists(paste(ref_dir, "human_g1k_v37_decoy.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37_decoy.fasta")
+    if(!file.exists(paste(ref_dir, "mskilab_combined_TraFicv8-3_satellites.fa", sep="/"))) stop("ref_dir must contain msilab_combined_TraFicv8-3_satellites.fa")
+    if(!file.exists(paste(ref_dir, "PolyA.fa", sep="/"))) stop("ref_dir must contain PolyA.fa")
+    if(!file.exists(paste(ref_dir, "human_g1k_v37.withviral.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37.withviral.fasta")
+    
     hg19 = BWA(fasta=paste(ref_dir, "human_g1k_v37_decoy.fasta", sep="/"))
     rep = BWA(fasta=paste(ref_dir, "mskilab_combined_TraFicv8-3_satellites.fa", sep="/"))
-    polyA = BWA(fasta=paste(ref_dir, "references/PolyA.fa", sep="/"))
+    polyA = BWA(fasta=paste(ref_dir, "PolyA.fa", sep="/"))
     microbe = BWA(fasta=paste(ref_dir, "human_g1k_v37.withviral.fasta", sep="/"), keep_sec_with_frac_of_primary_score=0.2)
-    virals = seqlevels(microbe)[85:length(seqlevels(microbe))]
+    uannot = readRDS(system.file('extdata', '101.unmappable.annotations.rds', package='loosends'))
     
     if(is.null(id)) id = "SAMPLE"
     if(!"sample" %in% colnames(li)) li$sample = id
     if(!"leix" %in% colnames(li)) li$leix = paste(id, strsplit(gr.string(dt2gr(li)), "-")[[1]][1], sep=":")
     ro = !is.null(outdir)
 
-    ri = loose.reads(li, tbam=tbam, nbam=nbam, filter=FALSE, pad=5e3)
+    leix = li$leix
+    ri = loose.reads(li, tbam=tbam, nbam=nbam, filter=FALSE, pad=5e3, ref=hg19, verbose=verbose)
     ri$sample = as.character(ri$sample)
     ri$leix = li$leix
     ri[, track := paste(ifelse(sample == li$sample, "sample", "control"), ifelse(strand == "+", "for", "rev"), sep=".")]
@@ -1004,6 +1031,7 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
     pp = gr.stripstrand(gr.tile(wholseed, 200) %Q% (width == 200))
 
     .build.tigs = function(ri, pp, ro, outdir){
+        if(verbose) message("assembling contigs")
         out.dt = rbindlist(lapply(1:length(pp), function(i){
             win = pp[i]
             build.from.win(win, ri)
@@ -1014,16 +1042,20 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
         out.dt$somatic = rep(somatic, nrow(out.dt))
         out.dt = out.dt[!is.na(seq)]
 
+        if(verbose) message(paste("assembled", nrow(out.dt), "contigs across all tracks"))
         if(nrow(out.dt)){
             out.dt[, qname := 1:.N, by=.(track, sample, leix)]
             out.dt[, qname := paste(sample, leix, track, qname, sep="_")]
         } else{
             out.dt$qname = character()
         }
+        if(verbose) message("aligning contigs to 4 references")
         ureps = rep[out.dt$seq]
         preps = polyA[out.dt$seq]
         mreps = microbe[out.dt$seq]
         hreps = hg19[out.dt$seq]
+        virals = seqlevels(microbe)[85:length(seqlevels(microbe))]
+        
         if(!(length(ureps))){
             ureps$cigar = character()
             ureps$mapq = character()
@@ -1058,17 +1090,19 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
             mreps$query.id  = as.integer(mreps$qname)
             mreps$qname = out.dt[mreps$query.id, qname]
             vreps = mreps %Q% (seqnames %in% virals) %Q% (qname %in% good.ids)
+            if(verbose & length(vreps)) message("adding viral alignments")
             valns = cbind(as.data.table(vreps[, keep.cols]), out.dt[vreps$query.id])
             calns = rbind(ralns, valns)
             calns[, c_type := c(rep("rep", length(ureps)), rep("polyA", length(preps)), rep("human", length(hreps)), rep("viral", length(vreps)))]
             calns[, c_spec := c_type]
-            calns[c_type == "rep", c_spec := dunlist(strsplit(as.character(seqnames), "#", fixed=T))[!duplicated(rev(listid))][order(as.integer(listid)), V1]]
+            calns[c_type == "rep", c_spec := dunlist(strsplit(as.character(seqnames), "#", fixed=T))[rev(!duplicated(rev(listid)))][order(as.integer(listid)), V1]]
         } else{
             calns = ralns
         }
         calns$somatic = rep(somatic, nrow(calns))
         calns$mapq = as.integer(calns$mapq)
         if(nrow(out.dt)){
+            if(verbose) message("quantifying contig read support")
             if(nrow(valns)){
                 ch = cgChain(calns)
             } else ch = rch
@@ -1108,37 +1142,45 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
 
         if(ro) saveRDS(out.dt, paste(outdir, paste0(li$leix, ".contigs.rds"), sep="/"))
         if(ro) saveRDS(calns, paste(outdir, paste0(li$leix, ".aligned.contigs.rds"), sep="/"))
+        if(verbose) message("parsing contigs for telomeric matches")
         all.contigs = copy(calns)
         all.contigs[c_type == "human", c_spec := ifelse(seqnames %in% c(1:22, "X", "Y"), "human", "unassembled")]
-        all.contigs$cmer = munch(all.contigs, cqueries)
-        all.contigs$gmer = munch(all.contigs, gqueries)
+        all.contigs$cmer = munch(all.contigs, eighteenmer('c'))
+        all.contigs$gmer = munch(all.contigs, eighteenmer('g'))
 
+        if(verbose) message("parsing alignments for unmappable repeat overlaps")
         coord.calls = copy(all.contigs[c_type=="human"])[, !c("c_type", "c_spec")]
         ov = gr.findoverlaps(dt2gr(coord.calls), uannot)
+        if(length(ov)){
         subj = ov$subject.id
         strand(ov) = coord.calls[ov$query.id, strand]
         values(ov) = values(dt2gr(coord.calls)[ov$query.id])
         ov$c_type = "rep"
         ov$c_spec = uannot[subj]$c_spec
         coord.calls = as.data.table(ov)
-
         return(rbind(all.contigs, coord.calls, fill=T, use.names=T))
+        }
+        return(all.contigs)
     }
 
     all.contigs = .build.tigs(ri, pp, ro, outdir)
 
-    call = caller(li, all.contigs)
-    disc = read.based(li, ri)
+    if(verbose) message("generating call...")
+    call = caller(li, all.contigs, ref_dir=ref_dir)
+    disc = read.based(li, ri, ref_dir=ref_dir)
     call[, missedj := missedj | disc$missedj]
     call[, complex := complex | disc$complex]
     call[, mystery := !missedj & !complex & mate.mappable & seed.mappable & !insertion]
     call[(missedj) & !grepl("missed junction", call)]$call = update.call(call)
     if(call$mystery){
+        if(verbose) message("mystery: repeating assembly at larger intervals")
         pp = gr.stripstrand((gr.tile(wholseed-250, 500)+250) %Q% (width == 1e3))
         wide.contigs = .build.tigs(ri, pp, ro, outdir)
-        call = caller(li, wide.contigs)
+        call = caller(li, wide.contigs, ref_dir=ref_dir)
     }
     if(ro) saveRDS(call, paste(outdir, paste0(li$leix, ".call.rds"), sep="/"))
+    call[, category := ifelse(complex, "complex rearrangement", ifelse(missedj, "missed junction", ifelse(seedrep & !(seed.mappable), "seed repeat", ifelse(materep & !(mate.mappable), "mate repeat", "mystery"))))]
+    call[category=="mystery", mystery := TRUE]
     call[, ":="(
         leix = li[, leix],
         loose.end = li[, paste0(seqnames, ":", start, strand)],
@@ -1152,8 +1194,9 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
 #' @param le GRanges or data.table of loose ends
 #' @param bam path to BAM file
 #' @param pad integer width of padding to add around loose ends
-.sample.spec = function(le, bam, pad){
-    message(paste("loading reads from", bam))
+#' @param verbose optional, default=FALSE
+.sample.spec = function(le, bam, pad, verbose=FALSE){
+    if(verbose) message(paste("loading reads from", bam))
     if(!inherits(le, "GRanges")) le = dt2gr(le)
     sl = c(seqlengths(BamFile(bam)), setNames(1, "*"))
     has.chr = any(grepl("chr", seqnames(seqinfo(BamFile(bam)))))
@@ -1179,14 +1222,14 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
     stopifnot(!is.na(mw$mrnm))
     mw[, ":="(seqnames = mrnm, start = ifelse(is.na(mpos), start, mpos), end = ifelse(is.na(mpos), end, mpos))]
     reads = reads[!is.na(seq)]
-##    fixmr = reads[qname %in% mw$qname, setNames(mrnm, qname)]
-##    mw[, seqnames := fixmr[qname]]
+    ##    fixmr = reads[qname %in% mw$qname, setNames(mrnm, qname)]
+    ##    mw[, seqnames := fixmr[qname]]
     mw = dt2gr(mw[,!"strand"], seqlengths=sl)
     mw[width(mw) == 0] = mw[width(mw) == 0] + 1
     mate.wins = gUtils::gr.reduce(mw+150)-150
     reads = reads[, !c("unpmate", "isunp", "unp", "SA")]
     if(length(mate.wins) > 0){
-        message(paste("loading mates from", length(mate.wins), "windows"))
+        if(verbose) message(paste("loading mates from", length(mate.wins), "windows"))
         m.mate.wins = mate.wins        
         mates = rbindlist(lapply(seq(1, length(m.mate.wins), 100), function(i){
             mi = read.bam(bam, gUtils::gr.reduce(gr.stripstrand(m.mate.wins[i:min(length(m.mate.wins), i+99)])), pairs.grl=F, isDuplicate=NA)
@@ -1195,7 +1238,7 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
             return(mi)
         }), fill=TRUE, use.names=TRUE)
         gc()
-        message("mates loaded")
+        if(verbose) message("mates loaded")
         rpair = rbind(reads, mates, fill=TRUE, use.names=TRUE)[!duplicated(paste(qname, flag)),]; rpair$MQ = NULL
     } else {
         rpair = reads[!duplicated(paste(qname, flag)),]; rpair$MQ = NULL
@@ -1203,7 +1246,7 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
     rpair[, R1 := bamflag(flag)[, "isFirstMateRead"]==1]
     rpair[, R2 := bamflag(flag)[, "isSecondMateRead"]==1]
     rpair[, paired := any(R1) & any(R2), by=qname]
-    message(ifelse(all(rpair$paired), "Found All Mates!!", "Some mates still missing - perhaps BAM was deduplicated"))
+    if(verbose) message(ifelse(all(rpair$paired), "Found All Mates!!", "Some mates still missing - perhaps BAM was deduplicated"))
     rpair[, MQ := rev(mapq), by=qname]; rpair[, MQ := MQ * as.integer(.N>1), by=qname]
     ##    flip = rpair$strand == "-"
     flip = bamflag(rpair$flag)[, "isMinusStrand"] == 1 | rpair$strand == "-"
@@ -1223,7 +1266,8 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
 #' @param ref reference genome for realignment
 #' @param gg optional, gGraph of sample used to identify sequences fitted in graph, default=NULL
 #' @param filter optional, filter=TRUE will return loose read pairs only, filter=FALSE returns all, default=TRUE
-.realign = function(reads, ref, gg=NULL, filter=TRUE){
+#' @param verbose optional, default=FALSE
+.realign = function(reads, ref, gg=NULL, filter=TRUE, verbose=F){
     if(!is.null(gg)){
         seqs = unique(seqnames(gg$nodes[!is.na(cn)]$gr))
     } else {
@@ -1236,7 +1280,7 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
         qni = unique(reads$qname)
     }
     redo = reads$qname %in% qni
-    message(paste("realigning", sum(redo), "reads"))
+    if(verbose) message(paste("realigning", sum(redo), "reads"))
     realn = ref[setNames(reads$seq, 1:length(reads))[redo]]
     realn$mapq = as.integer(realn$mapq)
     realn$query.id = as.integer(realn$qname); realn$qname = reads[realn$query.id]$qname
@@ -1277,25 +1321,25 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
 #' @param tbam character path to tumor BAM file
 #' @param pad optional, integer padding around le windows, default=25e3
 #' @param nbam optional, character path to normal BAM file, default=NULL
-#' @param ref optional, BWA object of reference genome for realignment, default=hg19
+#' @param ref optional, BWA object of reference genome for realignment or path to fasta, default=package/extdata/hg19_looseends/human_g1k_v37_decoy.fasta
 #' @param filter optional, logical filter=TRUE returns loose read pairs only, filter=FALSE returns all read pairs annotated with logical $loose column, default=T
 #' @param gg optional, gGraph corresponding to sample, used to identify sequences fitted in graph, default=NULL
+#' @param verbose optional, default=FALSE
 #' @export
-loose.reads = function(le, tbam, pad=25e3, nbam=NULL, ref=hg19, filter=TRUE, gg=NULL){
+loose.reads = function(le, tbam, pad=25e3, nbam=NULL, ref=system.file('extdata', 'hg19_looseends', 'human_g1k_v37_decoy.fasta', package='loosends'), filter=TRUE, gg=NULL, verbose=FALSE){
     le = copy(le)
     if(inherits(ref, "character")){
-        if(ref=="hg38") ref=hg38
-        else if(ref=="hg19") ref=hg19
-        else stop("ref not recognized")
+        if(!file.exists(ref)) stop("Provide reference BWA object or path to reference fasta for loose.reads")
+        ref = BWA(fasta=ref)
     }
     id = le[1]$sample
-    treads = .sample.spec(copy(le), tbam, pad)
-    realn = .realign(treads, ref, filter=filter, gg=gg)
+    treads = .sample.spec(copy(le), tbam, pad, verbose=verbose)
+    realn = .realign(treads, ref, filter=filter, gg=gg, verbose=verbose)
     realn$sample = id
 
     if(!is.null(nbam)){
-        nreads = .sample.spec(copy(le), nbam, pad)
-        nrealn = .realign(nreads, ref, filter=filter, gg=gg)
+        nreads = .sample.spec(copy(le), nbam, pad, verbose=verbose)
+        nrealn = .realign(nreads, ref, filter=filter, gg=gg, verbose=verbose)
         nrealn$sample = paste0(id, "N")
         gc()
         return(rbind(realn, nrealn, fill=TRUE, use.names=TRUE))

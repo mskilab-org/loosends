@@ -4,7 +4,7 @@
 \alias{filter.graph}
 \title{filter.graph}
 \usage{
-filter.graph(gg, cov.rds, field = "ratio", verbose = F)
+\method{filter}{graph}(gg, cov.rds, field = "ratio", verbose = F)
 }
 \arguments{
 \item{gg}{gGraph of JaBbA genome graph (contains loose ends)}
