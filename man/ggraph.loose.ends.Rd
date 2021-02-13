@@ -14,6 +14,7 @@ ggraph.loose.ends(
   purity = NULL,
   ploidy = NULL,
   field = "ratio",
+  PTHRESH = 3.4e-07,
   verbose = F,
   mc.cores = 1,
   ref_dir = system.file("extdata", "hg19_looseends", package = "loosends")
@@ -37,6 +38,8 @@ ggraph.loose.ends(
 \item{ploidy}{optional, ploidy of sample, default infers from gg}
 
 \item{field}{optional, name of informative column in cov.rds, default="ratio"}
+
+\item{PTHRESH}{optional, threshold for GLM p-value for calling true positive loose ends, default=3.4e-7 provides consanguinity with large dataset bonferroni correction}
 
 \item{verbose}{optional, will print status messages, default=FALSE}
 

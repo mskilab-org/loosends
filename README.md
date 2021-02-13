@@ -20,12 +20,14 @@ ggraph.loose.ends(gg = gG(jabba=/path/to/jabba.rds),
     purity = NULL, # default assumes purity = 1
     ploidy = NULL, # default estimates ploidy from gGraph
     field = "ratio", # normalized coverage field in cov.rds
+    PTHRESH = 3.4e-7, # recommended for 200bp bins. for 1kbp bins, use 2e-6
     verbose = F,
     mc.cores = 1,
     ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"))
 ```
 - will perform quality filters on fitted loose ends and evaluate all true positives
 - returns data.table describing the categorization and repeat content of each true positive loose end
+
 Performance depends on loose end burden in graph and sequencing coverage depth
 
 ### `process.loose.ends`
@@ -43,4 +45,5 @@ process.loose.ends(le = GRanges(),
 ```
 - returns data.table describing the categorization and repeat content of every input loose end
 - tbam, nbam, and id must all either be length=1 (all loose ends from a single sample) or length=length(le)
+
 Performance depends on sequencing coverage depth
