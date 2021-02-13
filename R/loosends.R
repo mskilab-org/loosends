@@ -201,10 +201,11 @@ munch = function(reads, query=NULL){
 #' @param purity optional, fractional purity of sample, default assumes 1
 #' @param ploidy optional, ploidy of sample, default infers from gg
 #' @param field optional, default = "ratio", column in binned coverage data
+#' @param PTHRESH optional, threshold for GLM p-value for calling true positive loose ends, default=3.4e-7 provides consanguinity with large dataset bonferroni correction
 #' @param verbose optional, default=FALSE
 #' @return data.table containing a row for every loose end in gGraph gg with a logical column `true.pos` indicating whether each loose end has passed all filters (TRUE) or not (FALSE)
 #' @export
-filter.graph = function(gg, cov.rds, purity=NULL, ploidy=NULL, field="ratio", verbose=F){
+filter.graph = function(gg, cov.rds, purity=NULL, ploidy=NULL, field="ratio", PTHRESH=3.4e-7, verbose=F){
     ## gather loose ends from sample
     if(verbose) message("Identifying loose ends")
     ll = gr2dt(gr.start(gg$nodes[!is.na(cn) & loose.cn.left>0]$gr))[, ":="(lcn = loose.cn.left, strand = "+")]
@@ -216,10 +217,10 @@ filter.graph = function(gg, cov.rds, purity=NULL, ploidy=NULL, field="ratio", ve
 
     if(length(l)==0) {
         if(verbose) message("No loose ends")
-        le.class = copy(l)[, true.pos := logical()]
+        le.class = as.data.table(copy(l))[, true.pos := logical()]
     } else{
         ## call true positives
-        le.class = filter.loose(gg, cov.rds, l, purity=purity, ploidy=ploidy, field=field, verbose=verbose)
+        le.class = filter.loose(gg, cov.rds, l, purity=purity, ploidy=ploidy, field=field, PTHRESH=PTHRESH, verbose=verbose)
     }
     return(le.class)
 }
@@ -927,11 +928,12 @@ transform = function(seq, s, e){
 #' @param purity optional, fractional purity of sample, default assumes 1
 #' @param ploidy optional, ploidy of sample, default infers from gg
 #' @param field optional, name of informative column in cov.rds, default="ratio"
+#' @param PTHRESH optional, threshold for GLM p-value for calling true positive loose ends, default=3.4e-7 provides consanguinity with large dataset bonferroni correction
 #' @param verbose optional, will print status messages, default=FALSE
 #' @param mc.cores optional, parallel cores for building contigs per loose end, default=1
 #' @param ref_dir optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'
 #' @export
-ggraph.loose.ends = function(gg, cov.rds, tbam, nbam=NULL, id=NULL, outdir=NULL, purity=NULL, ploidy=NULL, field="ratio", verbose=F, mc.cores=1, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends')){
+ggraph.loose.ends = function(gg, cov.rds, tbam, nbam=NULL, id=NULL, outdir=NULL, purity=NULL, ploidy=NULL, field="ratio", PTHRESH=3.4e-7, verbose=F, mc.cores=1, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends')){
     if(!is.null(outdir)) if(!file.exists(outdir)) {
                              tryCatch(readLines(pipe(paste("mkdir", outdir))), error = function(e) stop(paste("Provided output directory", outdir, "does not exist and cannot be made")))
                          }
@@ -941,7 +943,7 @@ ggraph.loose.ends = function(gg, cov.rds, tbam, nbam=NULL, id=NULL, outdir=NULL,
     if(!file.exists(paste(ref_dir, "PolyA.fa", sep="/"))) stop("ref_dir must contain PolyA.fa")
     if(!file.exists(paste(ref_dir, "human_g1k_v37.withviral.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37.withviral.fasta")
 
-    le.all = filter.graph(gg, cov.rds, purity=purity, ploidy=ploidy, field=field, verbose=verbose)
+    le.all = filter.graph(gg, cov.rds, purity=purity, ploidy=ploidy, field=field, PTHRESH=PTHRESH, verbose=verbose)
     process.loose.ends(le.all[(true.pos)], tbam, nbam=nbam, id=id, outdir=outdir, mc.cores=mc.cores, ref_dir=ref_dir, verbose=verbose)
 }
 
