@@ -212,14 +212,14 @@ filter.graph = function(gg, cov.rds, purity=NULL, ploidy=NULL, field="ratio", PT
     lr = gr2dt(gr.end(gg$nodes[!is.na(cn) & loose.cn.right>0]$gr))[, ":="(lcn = loose.cn.right, strand = "-")]
     l = rbind(ll, lr)
     l[, leix := 1:.N]
-    l = dt2gr(l)
-    if(verbose) message(sprintf("%s total loose ends in the graph", length(l)))
 
-    if(length(l)==0) {
+    if(nrow(l)==0) {
         if(verbose) message("No loose ends")
         le.class = as.data.table(copy(l))[, true.pos := logical()]
     } else{
         ## call true positives
+        l = dt2gr(l)
+        if(verbose) message(sprintf("%s total loose ends in the graph", length(l)))
         le.class = filter.loose(gg, cov.rds, l, purity=purity, ploidy=ploidy, field=field, PTHRESH=PTHRESH, verbose=verbose)
     }
     return(le.class)
@@ -281,6 +281,7 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
     if(verbose) message("Loading coverage bins")
     cov = readRDS(cov.rds)
     cov = gr.sub(cov, "chr", "")
+    if(!(field %in% colnames(values(cov)))) stop("must provide field in cov.rds")
     if(field != "ratio") cov$ratio = values(cov)[, field]
     if(!("tum.counts" %in% colnames(values(cov)))){
         yf = ifelse("reads.corrected" %in% colnames(values(cov)), "reads.corrected", field)
@@ -380,9 +381,9 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
     ## correct p values
     if(verbose) message("Identifying true positives")
     if(!("epgap" %in% colnames(le.class))){
-        le.class[, passed := !is.na(p) & p < PTHRESH & estimate > (0.6*effect.thresh) & testimate > (0.6*effect.thresh) & waviness < 2 & nestimate < (0.6*effect.thresh)]
-    }else le.class[, passed := !is.na(p) & p < PTHRESH & estimate > (0.6*effect.thresh) & testimate > (0.6*effect.thresh) & waviness < 2 & nestimate < (0.6*effect.thresh) & epgap < 1e-3]
-    le.class[, true.pos := passed & estimate > f.std & estimate > u.std & n_fdr > 0.05 & t_fdr < 0.01 & bon < 0.05]
+        le.class[, passed := !is.na(p) & p < PTHRESH & estimate > (0.6*effect.thresh) & testimate > (0.6*effect.thresh) & waviness < 2 & abs(nestimate) < (0.6*effect.thresh)]
+    }else le.class[, passed := !is.na(p) & p < PTHRESH & estimate > (0.6*effect.thresh) & testimate > (0.6*effect.thresh) & waviness < 2 & abs(nestimate) < (0.6*effect.thresh) & epgap < 1e-3]
+    le.class[, true.pos := passed & estimate > f.std & estimate > u.std & n_fdr > 0.05 & t_fdr < 0.01]
     le.class$passed = NULL
     
     gc()
