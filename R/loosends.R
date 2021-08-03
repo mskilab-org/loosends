@@ -348,7 +348,7 @@ filter.loose = function(gg, cov.rds, l, purity=NULL, ploidy=NULL, field="ratio",
 
     ## prep glm input matrix
     if(verbose) message("Prepping GLM input matrix")
-    glm.in = melt(rel[(in.quant.r),], id.vars=c("leix", "fused"), measure.vars=c("tum.counts", "norm.counts"), value.name="counts")[, tumor := variable=="tum.counts"]
+    glm.in = melt.data.table(rel[(in.quant.r),], id.vars=c("leix", "fused"), measure.vars=c("tum.counts", "norm.counts"), value.name="counts")[, tumor := variable=="tum.counts"]
     glm.in[, ix := 1:.N, by=leix]
     rel2 = copy(glm.in)
     setnames(glm.in, "leix", "leix2")
