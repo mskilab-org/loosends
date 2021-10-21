@@ -257,7 +257,8 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
 #' @param win GRanges seed window
 #' @param ri data.table reads and their mates
 #' @param tracks optional, character which tracks (sample + strand) to assemble, default all
-build.from.win = function(win, ri, tracks=NULL, verbose = FALSE){
+#' @param align.thres (numeric) width of alignment / number of non-N characters
+build.from.win = function(win, ri, tracks=NULL, verbose = FALSE, align.thres = 0.9){
     if(!("track" %in% colnames(ri))){
         ri[, track := ifelse(strand=="+", "for", "rev")]
     }
@@ -277,26 +278,52 @@ build.from.win = function(win, ri, tracks=NULL, verbose = FALSE){
             data.table(peak = gr.string(win[,c()]), seq = as.character(NA), good.assembly=FALSE, cov=ri[(seed), .N], mapq60=ri[(seed) & mapq==60, .N], unassembled.reads=nrow(rtmp))
         } else{
             srf = rtmp[, seed.frame]
-            message("Starting assembly with ", rtmp[, .N], " reads")
+            
+            if (verbose) {
+                message("Starting assembly with ", length(srf), " reads")
+            }
             f = Fermi(srf, assemble=T)
-            if(length(contigs(f))){
-                contigsf = contigs(f)
-                message("Number of contigs: ", length(contigsf))
-                unassembled.reads = as.integer(0)
-                while(TRUE & length(contigsf)){
+            contigsf = contigs(f)
+            unassembled.reads = length(srf)
+
+            if (verbose) {
+                message("Initial number of contigs: ", length(contigsf))
+            }
+            
+            if (length(contigsf)) {
+                reassemble = TRUE
+                while(reassemble){
+
+                    ## using current contigs, count the number of unassembled reads
                     ctigs = BWA(seq=contigsf)
                     aln = ctigs[srf]
+
+                    ## qnames not included in alignment
                     s1 = which(!(seq_along(srf) %in% as.integer(aln$qname)))
-                    s2 = as.data.table(aln)[, max(width / nchar(gsub("N", "", seq))), by=qname][V1 < 0.9, as.integer(qname)]
-                    if(sum(length(s1) + length(s2)) == unassembled.reads) break
-                    unassembled.reads = sum(length(s1) + length(s2))
-                    if(unassembled.reads > 7){
-                        message("Starting assembly with ", unassembled.reads, " reads")
+
+                    ## qnames with "bad" alignments (e.g. alignment width < 0.9 * #non-N characters)
+                    aln.dt = as.data.table(aln)
+                    align.frac.dt = aln.dt[, .(best.aln = max(width / nchar(gsub("N", "", seq)))), by = qname]
+                    s2 = align.frac.dt[best.aln < align.thres, as.integer(qname)]
+                    ## s2 = as.data.table(aln)[, max(width / nchar(gsub("N", "", seq))), by=qname][V1 < 0.9, as.integer(qname)]
+                    ## if the number of unassembled reads does not change from the previous iteration...
+                    if(length(s1) + length(s2) == unassembled.reads | length(s1) + length(s2) < 7) {
+                        reassemble = FALSE
+                    } else {
+                        unassembled.reads = length(s1) + length(s2)
+
+                        if (verbose) {
+                            message("Reassembling. Number of unassembled reads: ", unassembled.reads)
+                        }
+                        ## if(unassembled.reads > 7){
+                        ## message("Starting assembly with ", unassembled.reads, " reads")
                         c2 = Fermi(srf[c(s1, s2)], assemble=T)
                         if(length(contigs(c2))){
                             contigsf = c(contigsf, contigs(c2))
-                        } else break
-                    } else break
+                        } else {
+                            reassemble = FALSE
+                        }
+                    }
                 }
                 goodassembly = rep(TRUE, length(contigsf))
                 for(i in seq_along(contigsf)){
@@ -2486,7 +2513,7 @@ call_loose_end = function(li, ri,
                 if(grepl("control", out.dt[i]$track)) return(list(support=0, cov=0, mapq60=0, used.cs=op))
                 ctigs = calns[qname == out.dt[i]$qname]
                 if(nrow(ctigs)==0) return(list(support=0, cov=0, mapq60=0, used.cs=op))
-                win = out.dt[i, GRanges(peak)]
+                win = out.dt[i, GRanges(peak)] ## should this window be padded?
                 seed = ri[dt2gr(ri) %N% win > 0] ## which qnames overlap the peak window?
                 strand(win) = ifelse(grepl("for", out.dt[i]$track), "+", "-")
                 rtmp = ri[qname %in% seed$qname] ## which reads correspond with that qname?
@@ -2498,10 +2525,23 @@ call_loose_end = function(li, ri,
                     rc = contig.support(dt2gr(rtmp), ctigs, refseq)
                     op=TRUE
                 }
-                if(!length(rc)) return(list(support=0, cov=0, mapq60=0, used.cs=op))
-                t = rtmp[qname %in% rc$qname, table(factor(grepl("sample", track), c(TRUE, FALSE)))]
-                supp = ri[qname %in% rc$qname][grepl("sample", track)]
-                return(data.table(support=t["TRUE"] / sum(t), cov=seed[grepl("sample", track) & qname %in% rc$qname, .N], mapq60=seed[grepl("sample", track) & qname %in% rc$qname & mapq==60, .N], used.cs=op))
+                if(!length(rc)) {
+                    return(list(support=0, cov=0, mapq60=0, used.cs=op))
+                }
+                ## reannotate reads with track information
+                ## t = rtmp[qname %in% rc$qname, table(factor(grepl("sample", track), c(TRUE, FALSE)))]
+                ## supp = ri[qname %in% rc$qname][grepl("sample", track)]
+                ## return(data.table(support=t["TRUE"] / sum(t),
+                ##                   cov=seed[grepl("sample", track) & qname %in% rc$qname, .N],
+                ##                   mapq60=seed[grepl("sample", track) & qname %in% rc$qname & mapq==60, .N],
+                ##                   used.cs=op))
+                ## how many reads are from the tumor?
+                n.sample.reads = rtmp[sample == id & qname %in% rc$qname, .N]
+                n.supp.reads = rtmp[qname %in% rc$qname, .N]
+                return(data.table(support= n.sample.reads / n.supp.reads,
+                                  cov=seed[grepl("sample", track) & qname %in% rc$qname, .N],
+                                  mapq60=seed[grepl("sample", track) & qname %in% rc$qname & mapq==60, .N],
+                                  used.cs=op))                                                    
             }), use.names=T)
             out.dt$support = supp.dat$support
         } else {
@@ -2566,7 +2606,14 @@ call_loose_end = function(li, ri,
     if (verbose) {
         message("Generating call")
     }
-    res = caller(li, all.contigs, ref_obj = ref_obj, return.contigs = TRUE)
+
+    if (mix.tn) {
+        res = caller(li, all.contigs, ref_obj = ref_obj, return.contigs = TRUE)
+    } else {
+        ## if not mixed, call should only be generated from tumor contigs
+        res = caller(li, all.contigs[grepl('sample', track),], ref_obj = ref_obj, return.contigs = TRUE)
+    }
+    
     call = res$call
     filtered.contigs = res$contigs
     disc = read.based(li, ri, ref_obj=ref_obj)
@@ -2593,12 +2640,16 @@ call_loose_end = function(li, ri,
         pp = gr.stripstrand((gr.tile(wholseed-250, 500)+250) %Q% (width == 1e3))
         ## changed from ri to ri.input for consistency
         wide.contigs = .build.tigs(ri.input, pp, li$sample, li$leix, verbose = TRUE)
-        call = caller(li, wide.contigs, ref_obj=ref_obj)
+        if (mix.tn) {
+            call = caller(li, wide.contigs, ref_obj=ref_obj)
+        } else {
+            call = caller(li, wide.contigs[grepl('sample', track),], ref_obj = ref_obj)
+        }
     }
 
     call[, category := ifelse(complex, "complex rearrangement", ifelse(missedj, "missed junction", ifelse(mystery | grepl("mystery", mate.repeats), "mystery", paste("type", as.integer(!seed.mappable) + as.integer(!mate.mappable), "loose end"))))]
     call[category=="mystery", mystery := TRUE]
-    call[, ":="(
+    call[,  ":="(
         leix = li[, leix],
         loose.end = li[, paste0(seqnames, ":", start, strand)],
         sample = id)]
@@ -2627,7 +2678,8 @@ call_loose_end = function(li, ri,
 #' @param loose.end.str (character)
 #' @param reads.dt (data.table) data.table of reads coercible to GRanges
 #' @param contigs.dt (data.table) data.table with colnames track, peak, qname. all qnames should be identical.
-#' @param pad (numeric) pad loose ends?
+#' @param pad (numeric) pad loose ends for getting the refseq?
+#' @param seed.pad (numeric) pad around
 #' @param verbose (logical) 
 #' 
 #' @return data.table of candidate reads
@@ -2636,6 +2688,14 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
                         reads.dt = data.table(),
                         contigs.dt = data.table(),
                         pad = 1e3,
+                        refseq.pad = 1e4,
+                        seed.pad = 1e3,
+                        chimeric = TRUE,
+                        strict = TRUE,
+                        min.bases = 20,
+                        min.aligned.frac = 0.95,
+                        isize.diff = 1e3,
+                        all.reads = FALSE,
                         verbose = FALSE) {
 
     if (!is.na(loose.end) & inherits(loose.end, 'GRanges')) {
@@ -2666,20 +2726,31 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
         message("Grabbing reference sequence around loose end")
     }
     wholseed = li[,c()] + pad
-    refseq = as.character(getSeq(Hsapiens, gr.fix(gr.chr(wholseed+1.5e4), Hsapiens)))
+    refseq = as.character(getSeq(Hsapiens, gr.fix(gr.chr(wholseed+refseq.pad), Hsapiens)))
 
     if (verbose) {
         message("Grabbing reads overlapping contig peak")
     }
     win = contigs.dt[1, GRanges(peak)]
-    seed = reads.dt[dt2gr(reads.dt) %N% win > 0] ## which qnames overlap the peak window?
+    seed = reads.dt[dt2gr(reads.dt) %N% (win + seed.pad) > 0] ## which qnames overlap the peak window?
     strand(win) = ifelse(grepl("for", contigs.dt[1]$track), "+", "-")
     window.reads.dt = reads.dt[qname %in% seed$qname] ## which reads correspond with that qname?
 
     if (verbose) {
         message("Starting contig support")
     }
-    rc = contig.support(dt2gr(window.reads.dt), contigs.dt, refseq)
-    window.reads.dt[, supporting := qname %in% rc$qname]
-    return(window.reads.dt)
+    rc = contig.support(dt2gr(window.reads.dt),
+                        contigs.dt,
+                        refseq,
+                        chimeric = chimeric,
+                        strict = strict,
+                        min.bases = min.bases,
+                        min.aligned.frac = min.aligned.frac,
+                        isize.diff = isize.diff)
+
+    if (all.reads) {
+        window.reads.dt[, supporting := qname %in% rc$qname]
+        return(window.reads.dt)
+    }
+    return(rc)
 }
