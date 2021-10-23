@@ -1,3 +1,138 @@
+#' @name junction.support
+#' @title junction.support
+#' @description
+#'
+#' Forked from skitools to allow manual input of reference contig
+#'
+#' Takes as input a GRanges of bam alignments (e.g. outputted from bamUtils::read.bam) and a GRanges of rearranged
+#' reference aligned contigs (e.g. output of RSeqLib::BWA) and a set of Junction objects, and outputs reads supporting
+#' these junctions by building a contig around each junction (from the reference) and then running contig.support (see
+#' that functions docuemntation for criteria)
+#'
+#' @param loose.end.str (character)
+#' @param reads GRanges in SAM / BAM format e.g. output of read.bam or BWA, with fields $qname, $cigar, $flag $seq all populated in standard fashion, and optionally $AS
+#' @param junctions Junction object
+#' @param bwa RSeqLib BWA object and path to fasta file corresponding to the reference
+#' @param ref optional DNAStringSet corresponding to reference genome sequence
+#' @param pad padding around the junction breakpoint around  which to analyze contig and reference sequences, this should be several standard deviations above the average insert size (2000)
+#' @param realign flag whether to realign or just use existing alignments
+#' @param bx logical flag whether data is linked reads, must then have BX flag, and the pad will be set to minimum 1e5
+#' @param refseq.pad (1e3)
+#' @param verbose logical flag (TRUE)
+#' @param ... additional parameters to contig support
+#' @return reads re-aligned to the reference through the contigs with additional metadata describing features of the alignment
+#' @export
+#' @author Marcin Imielinski
+junction.support = function(loose.end.str = NA_character_, reads, junctions = NULL, bwa = NULL, ref = NULL, pad = 500, bx = FALSE, pad.ref = pad*20, refseq.pad = 1e3, realign = TRUE, walks = NULL, verbose = TRUE, ...)
+{
+    if (is.na(loose.end.str) | !inherits(loose.end.str, 'character')) {
+        stop('must supply character string for loose end')
+    }
+
+    wholseed = parse.gr(loose.end.str) + pad
+
+  if (!inherits(reads, 'GRanges') || is.null(reads$qname) || is.null(reads$cigar) || is.null(reads$seq) || is.null(reads$flag))
+    stop('read input must be GRanges with fields $qname, $cigar, $seq, $flag and optionally $AS')
+
+  sl = seqlengths(reads)
+  if (bx)
+    pad = max(pad, 1e5)
+
+  if (!is.null(junctions))
+    walks = jJ(junctions$grl)$gw(pad = pad)
+
+  if (is.null(walks))
+    stop('Either walks or junctions must be provided')
+
+  if (bx)
+  {
+    if (is.null(reads$BX))
+      stop('reads must have BX tag, may need to read.bam with tag option to extract it')
+
+    if (!length(reads))
+      return(reads)
+
+    sc = score.walks(walks$grl, reads = reads, verbose = FALSE, raw = TRUE)$sc
+    res = as.data.table(melt(as.matrix(sc)))[value>0, .(BX = Var1, walk = Var2)]
+    reads = gr2dt(reads) %>% merge(res, by = 'BX') %>% dt2gr
+    return(reads)
+  }
+
+  if (!realign)
+  {
+    if (is.null(junctions))
+      junctions = walks$edges$junctions
+
+    ## strand flip since 
+    ## read orientation convention
+    ## is opposite to junction convention
+    reads = gr.flipstrand(reads) 
+    reads$R1 = bamUtils::bamflag(reads$flag)[,'isFirstMateRead']>0
+    r1 = reads %Q% (R1 == TRUE) %>% as.data.table
+    r2 = reads %Q% (R1 == FALSE) %>% as.data.table
+    ov = merge(r1, r2, by = 'qname')
+    grl = grl.pivot(
+      GRangesList(dt2gr(ov[, .(seqnames = seqnames.x, start = start.x, end =end.x, strand = strand.x)],
+                        seqlengths = sl),
+                  dt2gr(ov[, .(seqnames = seqnames.y, start = start.y, end = end.y, strand = strand.y)],
+                        seqlengths = sl)))
+    values(grl)$qname = ov$qname
+    ## make junctions out of reads and cross with "real" junctions
+    jn = merge.Junction(jJ(grl), junctions, cartesian = TRUE, pad = pad)
+    if (!length(jn))
+      return(reads[c()])
+    out = merge(as.data.table(gr.flipstrand(reads)), unique(jn$dt[, .(qname, junction.id = subject.id)]), by = 'qname') %>% dt2gr(seqlengths = sl)
+    return(out)
+  }
+  
+  if (inherits(bwa, 'character') && file.exists(bwa))
+  {
+    if (verbose)
+      message('Loading BWA index')
+    bwa = BWA(bwa)
+  }
+
+  if (!inherits(ref, 'DNAStringSet'))
+  {
+    if (verbose)
+      message('Loading genome reference as DNAStringSet')
+
+    ref = rtracklayer::import(bwa@reference)
+  }
+
+  ## only use the fasta header before the first space as the seqnames of ref 
+  names(ref) = strsplit(names(ref), '\\s+') %>% sapply('[', 1)
+
+  if (length(setdiff(seqnames(walks$nodes$gr), seqlevels(ref))))
+    stop('seqlevels mismatch between junctions / walks and reference, please check reference (e.g. chr issues)')
+
+  if (length(setdiff(seqnames(walks$nodes$gr), seqlevels(bwa))))
+    stop('seqlevels mismatch between junctions / walks and BWA reference, please check reference (e.g. chr issues)')
+
+  if (verbose)
+    message('Building and mapping derivative contigs')
+
+  contig = bwa[ref[gr.fix(walks$grl, ref, drop = TRUE)]]
+
+  if (verbose)
+    message('Building reference contigs flanking loose end')
+   ## contigref = ref[gr.fix(walks$edges$junctions$footprint + pad.ref, ref, drop = TRUE)]
+    refseq = as.character(getSeq(Hsapiens, gr.fix(gr.chr(wholseed+refseq.pad), Hsapiens)))
+
+
+  if (verbose)
+    message('Making gChain mapping contigs to reference')
+  cg.contig = gChain::cgChain(contig)
+
+  if (verbose)
+    message('Running contig support')
+
+    ## reads = contig.support(reads, contig, ref = contigref, cg.contig = cg.contig, ...)
+    reads = contig.support(reads, contig, ref = refseq, cg.contig = cg.contig, ...)
+  reads$junction.id = reads$contig.id
+  return(reads)  
+}
+
 #' @name contig.support
 #' @title contig.support
 #' @description
@@ -35,7 +170,8 @@
 #' @param ref optional DNAStringSet representing a reference sequence to compute alignments against
 #' @param chimeric logical flag whether to require reads to support junctions in chimericcontigs (ie discontiguous chunks on the reference), chimeric = FALSE
 #' @param strict strict requires that the alignment score of the read to contig alignment needs to be better for at least one read (and also not worse for any of the reads) 
-#' @param
+#' @param isize.diff (numeric) the insert size in the reference vs. the insert size in the contig between discordant read pairs
+#' 
 #' @return reads re-aligned to the reference through the contigs with additional metadata describing features of the alignment
 #' @export
 #' @author Marcin Imielinski
@@ -85,8 +221,12 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
             tmp[, isize := ifelse(any(seqnames != seqnames[1] | any(strand != strand[1])), NA_integer_, diff(range(start, end))), by = qname]
             reads$isize = pmin(tmp[.(reads$qname, reads$R1), isize], reads$isize, Inf, na.rm = TRUE)
             reads$AS = tmp[.(reads$qname, reads$R1), AS]
+            ## replace cigar?
+            reads$ref.aligned.cigar = tmp[.(reads$qname, reads$R1), cigar]
         }
     }
+
+    ## browser()
 
     if (verbose)
         message('Aligning reads against derivative contigs')
@@ -94,8 +234,10 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
 
     ## aligning reads to contig
     rdt = as.data.table(reads)
-    rdt[, ref.aligned := countCigar(cigar)[, 'M']]
-    rdt[, ref.aligned.frac := ref.aligned/qwidth[1], by = .(qname, R1)]
+    ## use new cigar?
+    rdt[, ref.aligned := countCigar(ref.aligned.cigar)[, 'M']] 
+    rdt[, ref.aligned := countCigar(cigar)[, 'M']] ## this is not the cigar from the realignment?
+    rdt[, ref.aligned.frac := ref.aligned/qwidth[1], by = .(qname, R1)] 
 
     reads$ref.aligned.frac = rdt$ref.aligned.frac
 
@@ -130,7 +272,10 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
     readsc$AS.og[is.na(readsc$AS.og)] = 0
     readsc$qname = reads$qname[readsc$ix]
 
-
+    ## track sample (comment out later)
+    tst = readsc[, .(aligned.frac, AS, AS.og, ref.aligned.frac, qname)][, sample := rdt$sample[match(qname, rdt$qname)]]
+    tst[, .(aligned.frac, ref.aligned.frac, AS, AS.og, sample)]
+    
     ## new scoring method based on cgChain of reads to contigs
     if (new)
     {
@@ -140,7 +285,12 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
         if (verbose)
             message('Generating read to contig cgChain')
         alcg = gChain::cgChain(readsc)
-        alchunks = cbind(as.data.table(values(alcg)), as.data.table(gChain::links(alcg)$x), as.data.table(gChain::links(alcg)$y)[, .(contig = seqnames, contig.start = start, contig.end = end, contig.strand = strand)])
+        alchunks = cbind(as.data.table(values(alcg)),
+                         as.data.table(gChain::links(alcg)$x),
+                         as.data.table(gChain::links(alcg)$y)[, .(contig = seqnames,
+                                                                  contig.start = start,
+                                                                  contig.end = end,
+                                                                  contig.strand = strand)])
 
         ## strands should be aligned to read / fragment + strand, but if not let's flip
         alchunks[strand == '-', ":="(strand = '+', contig.strand = c('+' = '-', '-' = '+')[contig.strand])]
@@ -175,16 +325,33 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
         alchunks[, contig.isize := diff(range(contig.start, contig.end)), by = qname]
         alchunks[, bases := sum(width), by = qname]
 
+        ## nonzero width of chunks with better alignment scores relative to REF
         alchunks[, AS.better := sum(width[AS>AS.og]), by = qname]
         alchunks[, AS.worse := sum(width[AS<AS.og]), by = qname]
         alchunks[, AS.equal := sum(width[AS==AS.og]), by = qname]
 
-        keepq = alchunks[concordant.sign & concordant.R1R2 & concordant.start &
-                         bases > min.bases & aligned.frac > min.aligned.frac & aligned.frac >= ref.aligned.frac & 
-                         (AS.better>0 | contig.isize<ref.isize) & AS.worse == 0, ]
+        ## for debugging! comment this out
+        alkeep = copy(alchunks)[, keepq := concordant.sign & concordant.R1R2 & concordant.start &
+                                                    bases > min.bases &
+                                                    aligned.frac > min.aligned.frac &
+                                                    aligned.frac >= ref.aligned.frac &  ## require strictly better?
+                                                    (AS.better>0 | contig.isize<ref.isize) & AS.worse == 0]
 
+        alkeep[, sample := rdt$sample[match(qname, rdt$qname)]]
+        alkeep[, .(AS, AS.og, aligned.frac, keepq, sample, ref.isize, contig.isize, bases)]
+        alkeep[, .(start.og, start)]
         
-        keepq = keepq[, .(qname, contig, contig.isize, contig.strand, bases, contig.sign, AS.better, AS.worse, AS.equal)] %>% unique(by = 'qname')
+        keepq = alchunks[concordant.sign & concordant.R1R2 & concordant.start &
+                         bases > min.bases & aligned.frac > min.aligned.frac &
+                         aligned.frac >= ref.aligned.frac &
+                         nsplit  == 1 & ## no split reads
+                         ## contig.isize <= ref.isize & ## require strict?
+                         (AS.better>0 | contig.isize<ref.isize) & ## use isize to prevent removing fb's
+                         AS.worse == 0, ] ## all bases non-inferior alignment to original
+
+        browser()
+        keepq = keepq[, .(qname, contig, contig.isize, contig.strand, bases,
+                          contig.sign, AS.better, AS.worse, AS.equal)] %>% unique(by = 'qname')
     }
     else ## old scoring method
     {
@@ -2686,10 +2853,11 @@ call_loose_end = function(li, ri,
 #' has column $supporting indicating whether they suupport the given contig
 read_support = function(loose.end = NA, loose.end.str = NA_character_,
                         reads.dt = data.table(),
+                        junction = NA,
                         contigs.dt = data.table(),
                         pad = 1e3,
                         refseq.pad = 1e4,
-                        seed.pad = 1e3,
+                        seed.pad = 0,
                         chimeric = TRUE,
                         strict = TRUE,
                         min.bases = 20,
@@ -2714,8 +2882,8 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
         stop("Empty reads.dt")
     }
     
-    if (!nrow(contigs.dt)) {
-        stop("Empty contigs.dt")
+    if (!nrow(contigs.dt) & is.na(junction)) {
+        stop("Either contigs.dt or junction must be supplied")
     }
 
     if (length(unique(contigs.dt$qname)) > 1) {
@@ -2752,5 +2920,5 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
         window.reads.dt[, supporting := qname %in% rc$qname]
         return(window.reads.dt)
     }
-    return(rc)
+    return(as.data.table(rc))
 }
