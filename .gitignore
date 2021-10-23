@@ -40,6 +40,8 @@ vignettes/*.pdf
 
 # ignore emacs files
 *.R~
+**.\#*
+**\#*
 
 # ignore data files
 inst/extdata/hg19_*
