@@ -209,7 +209,21 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
     {
         if (verbose)
             message('Realigning reads against reference DNAStringSet')
-        bwa.ref = RSeqLib::BWA(seq = ref)
+        
+        if (inherits(ref, 'character') | inherits(ref, 'DNAStringSet')) {
+            if (verbose) {
+                message("building BWA from sequence")
+            }
+            bwa.ref = RSeqLib::BWA(seq = ref)
+        } else if (inherits(ref, 'BWA')) {
+            if (verbose) {
+                message("Using supplied BWA")
+            }
+            bwa.ref = ref
+        } else {
+            stop("invalid data type provided for ref: ", class(ref)[1])
+        }
+
         tmp = bwa.ref[reads$seq] %>% gr2dt
         tmp$ix = as.numeric(as.character(tmp$qname))
         tmp$R1 = reads$R1[tmp$ix]
@@ -218,15 +232,22 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
         setkeyv(tmp, c('qname', 'R1'))
         if (nrow(tmp))
         {
+            ## what if not both read pairs are included?
             tmp[, isize := ifelse(any(seqnames != seqnames[1] | any(strand != strand[1])), NA_integer_, diff(range(start, end))), by = qname]
-            reads$isize = pmin(tmp[.(reads$qname, reads$R1), isize], reads$isize, Inf, na.rm = TRUE)
+            ## isize should be NA if only one of the sides has a match
+            unpaired.qnames = tmp[, .(count = .N), by = qname][count == 1, qname]
+            tmp[qname %in% unpaired.qnames, isize := NA_integer_]
+            ## the final isize should only account for the isize from the provided refseq
+            reads$isize = pmin(tmp[.(reads$qname, reads$R1), isize], Inf, na.rm = TRUE)
+            ## next line is the original version
+            ## reads$isize = pmin(tmp[.(reads$qname, reads$R1), isize], reads$isize, Inf, na.rm = TRUE)
+            ## reads[, c("isize", "isize.new", "isize.pmin", "sample")] %Q% (sample == "A0K8N")
+            ## reads %Q% (qname %in% unpaired.qnames)
             reads$AS = tmp[.(reads$qname, reads$R1), AS]
-            ## replace cigar?
+            ## replace cigar
             reads$ref.aligned.cigar = tmp[.(reads$qname, reads$R1), cigar]
         }
     }
-
-    ## browser()
 
     if (verbose)
         message('Aligning reads against derivative contigs')
@@ -241,13 +262,12 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
 
     reads$ref.aligned.frac = rdt$ref.aligned.frac
 
+    ## readsc is a data.table that denotes read locations in contig coordinates
     readsc = bwa.contig[reads$seq] %>% gr2dt
     readsc$cigar = as.character(readsc$cigar)
     readsc$ix = as.integer(as.character(readsc$qname))
     readsc$R1 = reads$R1[readsc$ix]
     readsc$read.id = reads$read.id[readsc$ix]
-
-
 
     ## these are splits on the contig, not reference --> shouldn't be any for good alignment
     readsc[, nsplit := .N, by = .(qname, R1)] 
@@ -326,32 +346,22 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
         alchunks[, bases := sum(width), by = qname]
 
         ## nonzero width of chunks with better alignment scores relative to REF
-        alchunks[, AS.better := sum(width[AS>AS.og]), by = qname]
-        alchunks[, AS.worse := sum(width[AS<AS.og]), by = qname]
-        alchunks[, AS.equal := sum(width[AS==AS.og]), by = qname]
+        ## should this also be by read? (e.g. qname, R1)
+        alchunks[, AS.better := sum(width[AS>AS.og]), by = .(qname, R1)]
+        alchunks[, AS.worse := sum(width[AS<AS.og]), by = .(qname, R1)]
+        alchunks[, AS.equal := sum(width[AS==AS.og]), by = .(qname, R1)]
 
-        ## for debugging! comment this out
-        alkeep = copy(alchunks)[, keepq := concordant.sign & concordant.R1R2 & concordant.start &
-                                                    bases > min.bases &
-                                                    aligned.frac > min.aligned.frac &
-                                                    aligned.frac >= ref.aligned.frac &  ## require strictly better?
-                                                    (AS.better>0 | contig.isize<ref.isize) & AS.worse == 0]
-
-        alkeep[, sample := rdt$sample[match(qname, rdt$qname)]]
-        alkeep[, .(AS, AS.og, aligned.frac, keepq, sample, ref.isize, contig.isize, bases)]
-        alkeep[, .(start.og, start)]
-        
         keepq = alchunks[concordant.sign & concordant.R1R2 & concordant.start &
                          bases > min.bases & aligned.frac > min.aligned.frac &
                          aligned.frac >= ref.aligned.frac &
                          nsplit  == 1 & ## no split reads
-                         ## contig.isize <= ref.isize & ## require strict?
+                         contig.isize - ref.isize < isize.diff & ## reimplementation of isize.diff
                          (AS.better>0 | contig.isize<ref.isize) & ## use isize to prevent removing fb's
                          AS.worse == 0, ] ## all bases non-inferior alignment to original
 
-        browser()
-        keepq = keepq[, .(qname, contig, contig.isize, contig.strand, bases,
-                          contig.sign, AS.better, AS.worse, AS.equal)] %>% unique(by = 'qname')
+        ## keep read-specific information... 
+        keepq = keepq[, .(qname, R1, contig, contig.isize, contig.strand, bases,
+                          contig.sign, AS.better, AS.worse, AS.equal)] %>% unique(by = c('qname', 'R1'))
     }
     else ## old scoring method
     {
@@ -395,7 +405,9 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
         keepq$aligned.frac = NULL
     }
 
-    readsc = merge(readsc, keepq, by = 'qname') %>% dt2gr
+    ## R1/R2-speicific information is lost here
+    ##readsc = merge(readsc, keepq, by = 'qname') %>% dt2gr
+    readsc = merge(readsc, keepq, by = c('qname', 'R1')) %>% dt2gr
     
     if (verbose)
         message('Lifting reads through contig back to reference')
@@ -415,6 +427,7 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
 
     if (verbose)
         message('Done')
+
     out
 }
 
@@ -2180,7 +2193,8 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
                         rc = BWA(seq=c(ctigs[1]$seq, refseq))[rtmp$reading.frame] %Q% (seqnames == 1) %Q% (mapq == 60)
                         rc$qname = rtmp[as.integer(rc$qname), qname]
                     } else{
-                        rc = contig.support(dt2gr(rtmp), ctigs, refseq)
+                        ## change this to legacy contig support for now
+                        rc = contig.support.legacy(dt2gr(rtmp), ctigs, refseq)
                         op=TRUE
                     }
                     if(!length(rc)) return(list(support=0, cov=0, mapq60=0, used.cs=op))
@@ -2689,7 +2703,8 @@ call_loose_end = function(li, ri,
                     rc = BWA(seq=c(ctigs[1]$seq, refseq))[rtmp$reading.frame] %Q% (seqnames == 1) %Q% (mapq == 60)
                     rc$qname = rtmp[as.integer(rc$qname), qname]
                 } else{
-                    rc = contig.support(dt2gr(rtmp), ctigs, refseq)
+                    ## change to legacy contig support
+                    rc = contig.support.legacy(dt2gr(rtmp), ctigs, refseq)
                     op=TRUE
                 }
                 if(!length(rc)) {
@@ -2839,7 +2854,9 @@ call_loose_end = function(li, ri,
 #'
 #' @description
 #'
-#' get read support for a contig for debugging
+#' wrapper around contig.support for easy(-ish) debugging
+#'
+#' like contig.support, the input contigs must be nonempty and contain a single qname
 #'
 #' @param loose.end (GRanges)
 #' @param loose.end.str (character)
@@ -2847,14 +2864,19 @@ call_loose_end = function(li, ri,
 #' @param contigs.dt (data.table) data.table with colnames track, peak, qname. all qnames should be identical.
 #' @param pad (numeric) pad loose ends for getting the refseq?
 #' @param seed.pad (numeric) pad around
-#' @param verbose (logical) 
+#' @param all.reads (logical) return all input reads or just the chunks supporing the contig? (default FALSE)
+#' @param ref.coordinates (logical) want reads in ref (vs contig) coordinates? default TRUE
+#' @param verbose (logical)
+#' @param ... additional parameters to contig.support
 #' 
 #' @return data.table of candidate reads
-#' has column $supporting indicating whether they suupport the given contig
+#' if all.reads is FALSE and there are no supporting reads an empty table is returned
+#' if all.reads is TRUE the table will have column $supporting indicating whether read suupports given contig
 read_support = function(loose.end = NA, loose.end.str = NA_character_,
                         reads.dt = data.table(),
-                        junction = NA,
                         contigs.dt = data.table(),
+                        ref.bwa = NULL,
+                        fasta = NA_character_,
                         pad = 1e3,
                         refseq.pad = 1e4,
                         seed.pad = 0,
@@ -2864,7 +2886,9 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
                         min.aligned.frac = 0.95,
                         isize.diff = 1e3,
                         all.reads = FALSE,
-                        verbose = FALSE) {
+                        ref.coordinates = TRUE,
+                        verbose = FALSE,
+                        ...) {
 
     if (!is.na(loose.end) & inherits(loose.end, 'GRanges')) {
         li = copy(loose.end)
@@ -2882,7 +2906,7 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
         stop("Empty reads.dt")
     }
     
-    if (!nrow(contigs.dt) & is.na(junction)) {
+    if (!nrow(contigs.dt)) {
         stop("Either contigs.dt or junction must be supplied")
     }
 
@@ -2890,11 +2914,32 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
         stop("some contigs have different qnames")
     }
 
-    if (verbose) {
-        message("Grabbing reference sequence around loose end")
+    if (is.null(ref.bwa)) {
+
+        if (file.exists(fasta)) {
+            if (verbose) {
+                message("Building BWA object from supplied FASTA: ", fasta)
+            }
+            ref.bwa = BWA(fasta = fasta)
+        } else {
+            if (verbose) {
+                message("Grabbing reference sequence around loose end")
+            }
+            wholseed = li[,c()] + pad
+            refseq = as.character(getSeq(Hsapiens,
+                                         gr.fix(gr.chr(wholseed+refseq.pad), Hsapiens)))
+            ref.bwa = BWA(refseq)
+        }
+        
+    } else {
+        if (inherits(ref.bwa, 'BWA')) {
+            if (verbose) {
+                message("Using supplied ref.bwa")
+            }
+        } else {
+            stop("Invalid format supplied for BWA")
+        }
     }
-    wholseed = li[,c()] + pad
-    refseq = as.character(getSeq(Hsapiens, gr.fix(gr.chr(wholseed+refseq.pad), Hsapiens)))
 
     if (verbose) {
         message("Grabbing reads overlapping contig peak")
@@ -2909,12 +2954,13 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
     }
     rc = contig.support(dt2gr(window.reads.dt),
                         contigs.dt,
-                        refseq,
+                        ref = ref.bwa,## refseq,
                         chimeric = chimeric,
                         strict = strict,
                         min.bases = min.bases,
                         min.aligned.frac = min.aligned.frac,
-                        isize.diff = isize.diff)
+                        isize.diff = isize.diff,
+                        ...)
 
     if (all.reads) {
         window.reads.dt[, supporting := qname %in% rc$qname]
@@ -2922,3 +2968,5 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
     }
     return(as.data.table(rc))
 }
+
+
