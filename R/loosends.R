@@ -117,7 +117,8 @@ junction.support = function(loose.end.str = NA_character_, reads, junctions = NU
   if (verbose)
     message('Building reference contigs flanking loose end')
    ## contigref = ref[gr.fix(walks$edges$junctions$footprint + pad.ref, ref, drop = TRUE)]
-    refseq = as.character(getSeq(Hsapiens, gr.fix(gr.chr(wholseed+refseq.pad), Hsapiens)))
+    rs = getSeq(Hsapiens, trim(gr.fix(gr.chr(wholseed + refseq.pad), Hsapiens)))
+    refseq = as.character(rs)
 
 
   if (verbose)
@@ -175,6 +176,7 @@ junction.support = function(loose.end.str = NA_character_, reads, junctions = NU
 #' @return reads re-aligned to the reference through the contigs with additional metadata describing features of the alignment
 #' @export
 #' @author Marcin Imielinski
+
 contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = TRUE, cg.contig = gChain::cgChain(contig), isize.diff = 1e3, min.bases = 20, min.aligned.frac = 0.95, new = TRUE, 
                           verbose = TRUE)
 {
@@ -526,6 +528,7 @@ build.from.win = function(win, ri, tracks=NULL, verbose = FALSE, align.thres = 0
 #' returns logical vector of length subject indicating whether matches were found with any query
 #' @param query PDict of query sequences to match
 #' @param subject DNAStringSet of sequences to parse for matches
+
 match.seq = function(query, subject)
 {
     if (is.null(names(subject)))
@@ -2178,7 +2181,8 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
                 if(nrow(valns)){
                     ch = cgChain(calns)
                 } else ch = rch
-                refseq = as.character(getSeq(Hsapiens, gr.fix(gr.chr(wholseed+1.5e4), Hsapiens)))
+                rs = getSeq(Hsapiens, trim(gr.fix(gr.chr(wholseed + 15000), Hsapiens)))
+                refseq = as.character(rs)
                 supp.dat = rbindlist(lapply(1:nrow(out.dt), function(i){
                     op = FALSE
                     if(grepl("control", out.dt[i]$track)) return(list(support=0, cov=0, mapq60=0, used.cs=op))
@@ -2688,7 +2692,8 @@ call_loose_end = function(li, ri,
             if(nrow(valns)){
                 ch = cgChain(calns)
             } else ch = rch
-            refseq = as.character(getSeq(Hsapiens, gr.fix(gr.chr(wholseed+1.5e4), Hsapiens)))
+            rs = getSeq(Hsapiens, trim(gr.fix(gr.chr(wholseed + 15000), Hsapiens)))
+            refseq = as.character(rs)
             supp.dat = rbindlist(lapply(1:nrow(out.dt), function(i){
                 op = FALSE
                 if(grepl("control", out.dt[i]$track)) return(list(support=0, cov=0, mapq60=0, used.cs=op))
@@ -2926,8 +2931,8 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
                 message("Grabbing reference sequence around loose end")
             }
             wholseed = li[,c()] + pad
-            refseq = as.character(getSeq(Hsapiens,
-                                         gr.fix(gr.chr(wholseed+refseq.pad), Hsapiens)))
+            rs = getSeq(Hsapiens, trim(gr.fix(gr.chr(wholseed + 15000), Hsapiens)))
+            refseq = as.character(rs)
             ref.bwa = BWA(refseq)
         }
         
