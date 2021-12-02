@@ -2362,6 +2362,82 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
     return(reads)
 }
 
+#' @name .sample.spec2
+#' @title .sample.spec2
+#'
+#' @description
+#' loads reads and mates for a single sample (tumor or normal)
+#' assumes that BAM has already been filtered and avoids slow lapply
+#' 
+#' @param bam path to BAM file
+#' @param chrsub (logical) substitute chr header? default TRUE
+#' @param verbose optional, default=FALSE
+.sample.spec2 = function(bam,
+                         chrsub = TRUE,
+                         verbose = FALSE) {
+    if (verbose) {
+        message(paste("loading reads from", bam))
+    }
+
+    ## load all sequences from BAM
+    ## this assumes that this BAM has been pre-filtered to only include reads in relevant windows
+    ## and their mates
+    all.reads.grl = bamUtils::read.bam(bam, all = TRUE,
+                                       pairs.grl = TRUE, ## return GRangesList with read pairs
+                                       isDuplicate=NA, ## load all reads, regardless of if duplicated
+                                       isPaired=TRUE,
+                                       tag="SA") ## indicate split alignments
+    ## reads = as.data.table(unlist(all.reads.grl))
+    ## splits = reads[!is.na(SA)]
+    ## if(nrow(splits) > 0){
+    ##     splits$SA = as.character(splits$SA)
+    ##     ## grab the windows into which the reads are split
+    ##     splwin = dunlist(strsplit(splits$SA, ";"))
+    ##     spl = unlist(lapply(strsplit(splwin$V1, ","), function(w) paste(w[1], w[2], sep=":")))
+    ##     spl = GRanges(spl)
+    ##     ## get the other side of the read with matching qname from the BAM file
+    ##     spl$qname = splits[as.integer(splwin$listid)]$qname
+    ##     splitsides = as.data.table(unlist(read.bam(bam, gUtils::gr.reduce(spl+150)-150, pairs.grl=T, isDuplicate=NA, tag="SA")) %Q% (qname %in% spl$qname))[order(mrnm, mpos)][!duplicated(paste(seqnames, start, qname, seq))]
+    ##     reads = rbind(reads, splitsides, fill=T, use.names=TRUE)
+    ## }
+    reads[, unpmate := bamflag(flag)[, "hasUnmappedMate"]==1]
+    reads[, isunp := start == 1 & is.na(seq)]
+    reads[, unp := any(unpmate) & any(isunp), by=qname]
+    ## for reads with that are unmapped
+    ## set the start and end to start/end of its mate
+    reads[(unp), ":="(start = ifelse(isunp, start[unpmate], start),
+                      end = ifelse(isunp, end[unpmate], end)),
+          by=qname]
+    ## a missing read is an qname in which one of the sequences is NA
+    reads[, missing := any(is.na(seq)), by=qname]
+    reads = reads[!is.na(seq)]
+    ## choose non-duplicated reads and designate one R1 and the other R2
+    rpair = reads[!duplicated(paste(qname, flag)),];
+    rpair$MQ = NULL
+    rpair[, R1 := bamflag(flag)[, "isFirstMateRead"]==1]
+    rpair[, R2 := bamflag(flag)[, "isSecondMateRead"]==1]
+    rpair[, paired := any(R1) & any(R2), by=qname]
+    reads = reads[, !c("unpmate", "isunp", "unp", "SA")]
+    if(verbose) {
+        message(ifelse(all(rpair$paired),
+                       "Found All Mates!!",
+                       "Some mates still missing - perhaps BAM was deduplicated"))
+    }
+    rpair[, MQ := rev(mapq), by=qname]
+    rpair[, count := .N, by = qname]
+    rpair[count == 0, MQ := 0]
+    flip = bamflag(rpair$flag)[, "isMinusStrand"] == 1 | rpair$strand == "-"
+    rpair[flip, seq := as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq)))]
+    rpair = rpair[rev(order(nchar(seq)))][!duplicated(paste(qname, R1))]
+    reads = dt2gr(rpair)
+
+    if (chrsub) {
+        return(gr.nochr(reads))
+    }
+    gc()
+    return(reads)
+}
+
 #' .realign
 #'
 #' realigns reads and their mates single-end to attach individual MAPQs
@@ -2417,6 +2493,43 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
     return(realn)
 }
 
+#' @name loose.reads2
+#' @title loose.reads2
+#'
+#' @description
+#' same as loose reads but assumes we have a pre-filtered bam 
+#'
+#' loads and reads and their mates from given windows and realigns single end for read-specific MAPQ
+#' @param tbam character path to tumor BAM file
+#' @param nbam optional, character path to normal BAM file, default=NULL
+#' @param ref optional, BWA object of reference genome for realignment or path to fasta, default=package/extdata/hg19_looseends/human_g1k_v37_decoy.fasta
+#' @param filter optional, logical filter=TRUE returns loose read pairs only, filter=FALSE returns all read pairs annotated with logical $loose column, default=T
+#' @param gg optional, gGraph corresponding to sample, used to identify sequences fitted in graph, default=NULL
+#' @param verbose optional, default=FALSE
+#' @export
+loose.reads2 = function(tbam, nbam=NA, id="", ref=system.file('extdata', 'hg19_looseends', 'human_g1k_v37_decoy.fasta', package='loosends'), filter=TRUE, gg=NULL, verbose=FALSE){
+    if(inherits(ref, "character")) {
+        if(!file.exists(ref)) {
+            stop("Provide reference BWA object or path to reference fasta for loose.reads")
+        }
+        ref = RSeqLib::BWA(fasta=ref)
+    }
+    if(is.na(nbam)) nbam = NULL
+    treads = .sample.spec2(tbam, verbose = verbose)
+    realn = .realign(treads, ref, filter=filter, gg=gg, verbose=verbose)
+    realn$sample = id
+    gc()
+
+    if(!is.null(nbam)){
+        nreads = .sample.spec2(nbam, verbose = verbose)
+        nrealn = .realign(nreads, ref, filter=filter, gg=gg, verbose=verbose)
+        nrealn$sample = paste0(id, "N")
+        gc()
+        return(rbind(realn, nrealn, fill=TRUE, use.names=TRUE))
+    }
+    return(realn)
+}
+
 #' loose.reads
 #'
 #' loads and reads and their mates from given windows and realigns single end for read-specific MAPQ
@@ -2451,6 +2564,7 @@ loose.reads = function(le, tbam, pad=25e3, nbam=NA, ref=system.file('extdata', '
     gc()
     return(realn)
 }
+
 
 #' @name prep_loose_reads
 #' @title prep_loose_reads
