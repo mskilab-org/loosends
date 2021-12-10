@@ -889,10 +889,28 @@ filter.loose = function(gg,
     return(le.class)
 }
 
-#' return.dt
+#' @name return.dt
+#' @title return.dt
 #'
+#' @description
+#'
+#' construct loose end call from a set of binary inputs
+#'
+#' @param reference (logical) reference alignment?
+#' @param complex (logical) complex rearrangement?
+#' @param missedj (logical) type 0 loose end
+#' @param novel (logical) contains unaligned sequence?
+#' @param mystery (logical) either seed or mate is mystery
+#' @param insertion (logical) contig contain insertion?
+#' @param rrep (logical) type of reference (human) repeat
+#' @param irep (logical) non-reference (non-human) repeat
+#' @param refmap (logical) seed alignment is mappable
+#' @param novmap (logical) mate alignment is mappable
+#' @param seed.only (logical) contig overlaps seed region completely
+#' @param mate.only (logical) contig does not overlap seed region at all
+#' @param junction (character)
 #' constructs output data.table from logical arguments
-return.dt = function(reference, complex, missedj, novel, mystery, insertion, refmap=NULL, novmap=NULL, rrep=NULL, irep=NULL, nrep=NULL, junction=""){
+return.dt = function(reference, complex, missedj, novel, mystery, insertion, refmap=NULL, novmap=NULL, rrep=NULL, irep=NULL, nrep=NULL, seed.only = NA, mate.only = NA, junction=""){
     if(length(rrep)) if(length(rrep %Q% (c_spec == "unassembled"))) rrep[rrep$c_spec=="unassembled"]$c_spec = "low MAPQ"
     if(length(nrep)) if(length(nrep %Q% (c_spec == "unassembled"))) nrep[nrep$c_spec=="unassembled"]$c_spec = "low MAPQ"
     if(length(irep)) if(length(irep %Q% (c_spec == "unassembled"))) irep[irep$c_spec=="unassembled"]$c_spec = "low MAPQ"
@@ -949,7 +967,9 @@ return.dt = function(reference, complex, missedj, novel, mystery, insertion, ref
                mate.mappable = novmap,
                junction = junction,
                call = call.string,
-               category = single.call)
+               category = single.call,
+               seed.only = seed.only,
+               mate.only = mate.only)
 }
 
 #' update.call
@@ -1073,7 +1093,7 @@ posterity.caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NUL
     seed$qname = calns$qname
     ## narrow down to 1kb window on correct strand
     ## this filters out some that were only caught on the reverse ....
-    calns = calns[!is.na(gr.match(seed, gr.flipstrand(dt2gr(li))+pad, ignore.strand=F))]
+    ## calns = calns[!is.na(gr.match(seed, gr.flipstrand(dt2gr(li))+pad, ignore.strand=F))]
     if(!nrow(calns)){
         rrep = NULL
         if(dt2gr(li) %N% uannot) {
@@ -1420,10 +1440,10 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
     seed = GRanges(calns$peak)
     strand(seed) = ifelse(grepl("for", calns$track), "+", "-")
     seed$qname = calns$qname
-    ## narrow down to 1kb window on correct strand
-    ## this filters out some that were only caught on the reverse ....
+    ## only use contigs overlapping loose end within 1kb window 
     if("seed" %in% colnames(calns)) calns$seed = NULL
-    calns = calns[!is.na(gr.match(seed, gr.flipstrand(dt2gr(li))+pad, ignore.strand=F))]
+    ## we should ignore loose end strand here?
+    calns = calns[!is.na(gr.match(seed, gr.flipstrand(dt2gr(li))+pad, ignore.strand=T))]
     if(!nrow(calns)){
         nrep = uannot[1]
         nrep$c_spec = "mystery"
@@ -1447,7 +1467,7 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
     
     ## filter out contigs with too few good input reads?
     ## for now, we won't use MAPQ as a filter
-    if(calns[map60.cov > 0, .N == 0]){
+    if(calns[map60.cov >= 0, .N == 0]){
         reference = TRUE
         rrep = GRanges(li$seqnames, IRanges(li$start, li$end), c_spec="low MAPQ")
     }
@@ -1538,7 +1558,14 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
         } else refmap = refmap | all((x %Q% (seed))$mapq == 60)
         mystery = TRUE
         if (return.contigs) {
-            res = list(call = return.dt(reference, complex, missedj, novel, mystery, insertion, rrep=rrep, irep=irep, nrep=nrep, refmap=refmap, novmap=novmap),
+            res = list(call = return.dt(reference, complex,
+                                        missedj, novel, mystery,
+                                        insertion, rrep=rrep,
+                                        irep=irep,
+                                        nrep=nrep,
+                                        refmap=refmap,
+                                        novmap=novmap,
+                                        seed.only = TRUE),
                        irep = irep,
                        nrep = nrep,
                        contigs = x2)
@@ -1635,26 +1662,32 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
         seqlevels(x) = sm
     }
 
-    ## ## if > 99 bp of the contig consist of seed, then classify as mystery... (why?)
-    ## cs = sections[, sum(width[seed.side & !seeds]) > 99, by=seqnames][(V1), as.character(seqnames)]
-    ## if(length(cs)){
-    ##     if(all(sections[, seqnames %in% cs])){
-    ##         mystery = TRUE
-    ##         nrep = dt2gr(sections[(mate.side)][1][, c_spec := "mystery"])
-    ##         novmap = FALSE
-    ##         if (return.contigs) {
-    ##             res = list(call = return.dt(reference, complex, missedj, novel, mystery, insertion, rrep=rrep, irep=irep, nrep=nrep, refmap=refmap, novmap=novmap),
-    ##                        irep = irep,
-    ##                        nrep = nrep,
-    ##                        contigs = x)
-    ##             return(res)
-    ##         }
-    ##         return(return.dt(reference, complex, missedj, novel, mystery, insertion, rrep=rrep, irep=irep, nrep=nrep, refmap=refmap, novmap=novmap, junction=junction))
-    ##     }
-    ##     sections = sections[!(seqnames %in% cs)]
-    ##     x = x %Q% (!(seqnames %in% cs))
-    ##     seqlevels(x) = setdiff(seqlevels(x), cs)
-    ## }
+    ## if > 99 bp of the contig is on the seed side but does not overlap the peak
+    ## then classify as mystery...
+    ## since this implies that there is a big insertion in the seed region
+    cs = sections[, sum(width[seed.side & !seeds]) > 99, by=seqnames][(V1), as.character(seqnames)]
+    if(length(cs)){
+        if(all(sections[, seqnames %in% cs])){
+            mystery = TRUE
+            nrep = dt2gr(sections[(mate.side)][1][, c_spec := "mystery"])
+            novmap = FALSE
+            if (return.contigs) {
+                res = list(call = return.dt(reference, complex, missedj, novel, mystery, insertion, rrep=rrep, irep=irep, nrep=nrep, refmap=refmap, novmap=novmap),
+                           irep = irep,
+                           nrep = nrep,
+                           contigs = x)
+                return(res)
+            }
+            return(return.dt(reference, complex, missedj, novel, mystery, insertion, rrep=rrep, irep=irep, nrep=nrep, refmap=refmap, novmap=novmap, junction=junction))
+        }
+        sections = sections[!(seqnames %in% cs)]
+        x = x %Q% (!(seqnames %in% cs))
+        seqlevels(x) = setdiff(seqlevels(x), cs)
+    }
+
+    ## keep track of if contig is seed only or mate only
+    mate.only = sections[,all(seed.map=="mystery")]
+    seed.only = sections[,all(mate.map=="mystery")]
     
     if(sections[,all(seed.map=="mystery")]){
         if(dt2gr(li) %N% uannot){
@@ -1857,16 +1890,13 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
     if(missedj) refmap = novmap = TRUE
     mystery = mystery | !any(missedj, complex, reference, novel)
 
-    ## browser()
-
-    call.dt = return.dt(reference, complex, missedj, novel, mystery, insertion, rrep=rrep, irep=irep, nrep=nrep, refmap=refmap, novmap=novmap, junction=junction)
+    call.dt = return.dt(reference, complex, missedj, novel, mystery, insertion, rrep=rrep, irep=irep, nrep=nrep, refmap=refmap, novmap=novmap, junction=junction, seed.only = seed.only, mate.only = mate.only)
 
     if (return.contigs) {
         res = list(contigs = x, call = call.dt, irep = irep, nrep = nrep)
         return(res)
     }
     return(call.dt)
-    ##return(return.dt(reference, complex, missedj, novel, mystery, insertion, rrep=rrep, irep=irep, nrep=nrep, refmap=refmap, novmap=novmap, junction=junction))
 }
 
 
@@ -2456,30 +2486,66 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
 
 #' .realign
 #'
+#' @description
 #' realigns reads and their mates single-end to attach individual MAPQs
-#' @param reads GRanges or data.table of reads from BAM file with $seq in original reading frame
-#' @param ref reference genome for realignment
-#' @param gg optional, gGraph of sample used to identify sequences fitted in graph, default=NULL
-#' @param filter optional, filter=TRUE will return loose read pairs only, filter=FALSE returns all, default=TRUE
+#' 
+#' @param reads (GRanges or data.table) reads from BAM file with $seq in original reading frame
+#' @param ref (BWA object from RSeqLib) reference genome for realignment
+#' @param gg (gGraph) sample used to identify sequences fitted in graph, default=NULL
+#' @param filter (logical) return loose reads pairs only? default TRUE
+#' @param chunksize (numeric) perform realignment in chunks to help with memory. default 1e6
 #' @param verbose optional, default=FALSE
-.realign = function(reads, ref, gg=NULL, filter=TRUE, verbose=F){
+.realign = function(reads, ref, gg=NULL, filter=TRUE, verbose=F, chunksize = 5e5){
     if(!is.null(gg)){
         seqs = unique(seqnames(gg$nodes[!is.na(cn)]$gr))
     } else {
         seqs = c(1:22, "X", "Y")
         if(any(grepl("chr", seqlevels(ref)))) seqs = gr.chr(seqs)
     }
+
+    ## realign ALL reads if not filtering for loose pairs
+    ## otherwise, realign just the low MAPQ read in the pair
     if(filter){
         qni = as.data.table(reads)[is.na(mapq) | mapq<50 | is.na(MQ), (unique(qname))]
     } else{
         qni = unique(reads$qname)
     }
+
+    ## start realignment (in chunks)
     redo = reads$qname %in% qni
-    if(verbose) message(paste("realigning", sum(redo), "reads"))
-    realn = ref[setNames(reads$seq, 1:length(reads))[redo]]
+    if(verbose) {
+        message(paste("realigning", sum(redo), "reads"))
+    }
+    
+    ## do realignment in chunks to help with memory
+    seqs.for.realignment = setNames(reads$seq, 1:length(reads))
+    ix.for.realignment = which(redo)
+    nchunks = ceiling(sum(redo) / chunksize)
+    realn = data.table()
+    for (chunk in 1:nchunks) {
+        starti = (chunk - 1) * chunksize + 1
+        endi = pmin(sum(redo), (chunk * chunksize))
+        if (verbose) {
+            message("Chunk start: ", starti)
+            message("Chunk end: ", endi)
+            message("Chunk ", chunk, " of ", nchunks)
+        }
+        realni = ref[seqs.for.realignment[ix.for.realignment[starti:endi]]]
+        gc()
+        realn = rbind(realn, as.data.table(realni), use.names = TRUE, fill = TRUE)
+        ## remove unneeded variables to help with memory footprint
+        rm(realni)
+        gc()
+    }
+    
+    ## recast as GRanges since legacy code expects that
+    realn = dt2gr(realn)
+    ## realn = ref[setNames(reads$seq, 1:length(reads))[redo]]
     realn$mapq = as.integer(realn$mapq)
     realn$query.id = as.integer(realn$qname); realn$qname = reads[realn$query.id]$qname
     values(realn) = cbind(values(realn), values(reads[realn$query.id, !(colnames(values(reads)) %in% colnames(values(realn)))]))
+
+    ## keep track of the unaligned reads that didn't appear in the GRanges from BWA
     uix = ! ( (1:length(reads))[redo] %in% realn$query.id )
     uix = (1:length(reads))[redo][uix]
     unaln = as.data.table(reads[uix])
@@ -2490,6 +2556,9 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
         flag = ifelse(R1, 69, 113),
         mapq = 0,
         query.id = uix)]
+
+    ## final reads are the realigned reads in new genomic coordanates + unaligned reads
+    ## in addition, the original sequence + realignment mapqs are stored
     realn = rbind(as.data.table(realn), unaln, fill=T, use.names=TRUE)
     realn$reading.frame = reads[realn$query.id]$seq
     realn$mapq = as.integer(realn$mapq)
@@ -2499,6 +2568,8 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
     realn[, MQ := ifelse(rep(.N, .N)==1, as.integer(NA), c(mapq[-1], mapq[1])), by=qname]
     cols = c(colnames(realn)[colnames(realn) %in% colnames(as.data.table(reads))], "reading.frame", "AS")
     realn = realn[, cols, with=F]
+
+    ## annotate whether the read belongs to a loose read pair
     lqn = realn[mapq>50 & (is.na(MQ) | MQ < 1), qname]
     if(filter){
         realn = realn[qname %in% lqn,]
@@ -2513,15 +2584,24 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
 #' @title loose.reads2
 #'
 #' @description
-#' same as loose reads but assumes we have a pre-filtered bam 
+#' 
+#' Performs the following:
+#' - loads reads from a specified window around loose end
+#' - identifies any split reads and loads the "sides" of those reads as well
+#' - loads the mates of reads around the loose end (by qname)
+#' - realigns all of these reads
 #'
-#' loads and reads and their mates from given windows and realigns single end for read-specific MAPQ
+#' The supplied BAM files are expected to have tag SA (indicated split alignments)
+#' The functionality is identical to loose.reads; however, the BAMs are expected to be prefiltered to contain only the relevant QNAMEs via samtools to avoid slow filtering in R for reads with many mate windows
+#'
 #' @param tbam character path to tumor BAM file
 #' @param nbam optional, character path to normal BAM file, default=NULL
 #' @param ref optional, BWA object of reference genome for realignment or path to fasta, default=package/extdata/hg19_looseends/human_g1k_v37_decoy.fasta
 #' @param filter optional, logical filter=TRUE returns loose read pairs only, filter=FALSE returns all read pairs annotated with logical $loose column, default=T
 #' @param gg optional, gGraph corresponding to sample, used to identify sequences fitted in graph, default=NULL
 #' @param verbose optional, default=FALSE
+#'
+#' @return data.table of reads relaigned to the specified reference
 #' @export
 loose.reads2 = function(tbam, nbam=NA, id="", ref=system.file('extdata', 'hg19_looseends', 'human_g1k_v37_decoy.fasta', package='loosends'), filter=TRUE, gg=NULL, verbose=FALSE){
     if(inherits(ref, "character")) {
@@ -2536,7 +2616,7 @@ loose.reads2 = function(tbam, nbam=NA, id="", ref=system.file('extdata', 'hg19_l
     realn$sample = id
     gc()
 
-    if(!is.null(nbam)){
+    if(!is.null(nbam) && !is.na(nbam) && file.exists(nbam) && file.info(nbam)$size){
         nreads = .sample.spec2(nbam, verbose = verbose)
         nrealn = .realign(nreads, ref, filter=filter, gg=gg, verbose=verbose)
         nrealn$sample = paste0(id, "N")
@@ -2817,95 +2897,129 @@ call_loose_end = function(li, ri,
         }
         calns$somatic = rep(somatic, nrow(calns))
         calns$mapq = as.integer(calns$mapq)
-        if(nrow(out.dt)){
-            if(verbose) message("quantifying contig read support")
-            if(nrow(valns)){
-                ch = cgChain(calns)
-            } else ch = rch
-            ## technically we don't need this
-            ## rs = getSeq(Hsapiens, trim(gr.fix(gr.chr(wholseed + 15000), Hsapiens)))
-            ## refseq = as.character(rs)
-            supp.dat = rbindlist(lapply(1:nrow(out.dt), function(i){
-                op = FALSE
-                if(grepl("control", out.dt[i]$track)) return(list(support=0, cov=0, mapq60=0, used.cs=op))
-                ctigs = calns[qname == out.dt[i]$qname]
-                if(nrow(ctigs)==0) return(list(support=0, cov=0, mapq60=0, used.cs=op))
-                win = out.dt[i, GRanges(peak)] ## should this window be padded?
-                seed = ri[dt2gr(ri) %N% win > 0] ## which qnames overlap the peak window?
-                strand(win) = ifelse(grepl("for", out.dt[i]$track), "+", "-")
-                rtmp = ri[qname %in% seed$qname] ## also get their mates
-                ## x = dt2gr(as.data.table(ch$x)[seqnames == out.dt[i]$qname])
-                ## return type should be a data.table
-                rc = read_support(loose.end = dt2gr(li),
-                                      reads.dt = rtmp,
-                                      contigs = ctigs,
-                                      ref.bwa = human, ## use human BWA object
-                                      verbose = TRUE)
-                op = TRUE
-                ## if(any(x == reduce(x)) | nrow(ctigs) == 1){ 
-                ##     rc = BWA(seq=c(ctigs[1]$seq, refseq))[rtmp$reading.frame] %Q% (seqnames == 1) %Q% (mapq == 60)
-                ##     rc$qname = rtmp[as.integer(rc$qname), qname]
-                ## } else{
-                ##     ## use new contig support
-                ##     ## 
-                ##     rc = contig.support.legacy(dt2gr(rtmp), ctigs, refseq)
-                ##     op=TRUE
-                ## }
-                ## if(!length(rc)) {
-                ##     return(list(tumor.support = 0, normal.support = 0,
-                ##                 total.support = 0, tumor.frac = 0,
-                ##                 cov=0, mapq60=0, used.cs=op))
-                ## }
-                if(!rc[, .N]) {
-                    return(list(tumor.support = 0, normal.support = 0,
-                                total.support = 0, tumor.frac = 0,
-                                cov=0, mapq60=0, used.cs=op))
-                }
-                ## reannotate reads with track information
-                ## t = rtmp[qname %in% rc$qname, table(factor(grepl("sample", track), c(TRUE, FALSE)))]
-                ## supp = ri[qname %in% rc$qname][grepl("sample", track)]
-                ## return(data.table(support=t["TRUE"] / sum(t),
-                ##                   cov=seed[grepl("sample", track) & qname %in% rc$qname, .N],
-                ##                   mapq60=seed[grepl("sample", track) & qname %in% rc$qname & mapq==60, .N],
-                ##                   used.cs=op))
-                ## how many reads are from the tumor?
-                n.sample.reads = rtmp[sample == id & qname %in% rc$qname, .N]
-                ## how many reads are from the normal sample?
-                n.normal.reads = rtmp[sample != id & qname %in% rc$qname, .N]
-                n.supp.reads = n.sample.reads + n.normal.reads##rtmp[qname %in% rc$qname, .N]
-                return(data.table(tumor.support = n.sample.reads,
-                                  normal.support = n.normal.reads,
-                                  total.support = n.supp.reads,
-                                  tumor.frac = ifelse(n.supp.reads, n.sample.reads / n.supp.reads, 0),
-                                  ##support= n.sample.reads / n.supp.reads,
-                                  cov=seed[grepl("sample", track) & qname %in% rc$qname, .N],
-                                  mapq60=seed[grepl("sample", track) & qname %in% rc$qname & mapq==60, .N],
-                                  used.cs=op))                                                    
-            }), use.names=T)
-            ## out.dt$support = supp.dat$support
-            out.dt$tumor.support = supp.dat$tumor.support
-            out.dt$normal.support = supp.dat$normal.support
-            out.dt$total.support = supp.dat$total.support
-            out.dt$tumor.frac = supp.dat$tumor.frac
-            out.dt$cov = supp.dat$cov
-            out.dt$mapq60 = supp.dat$mapq60
-        } else {
-            out.dt$tumor.frac = numeric()
-            out.dt$cov = numeric()
-            out.dt$mapq60 = numeric()
-        }
-        setkey(out.dt, "qname")
-        calns[, tumor.spec := qname %in% out.dt[tumor.frac==1]$qname]
 
-        ## also keep the proportion of tumor-specific supporting reads
-        calns$tumor.frac = out.dt[.(calns$qname), tumor.frac]
-        calns$tumor.support = out.dt[.(calns$qname), tumor.support]
-        calns$normal.support = out.dt[.(calns$qname), normal.support]
-        calns$total.support = out.dt[.(calns$qname), total.support]
+        ## defer contig support as many contigs are filtered by the caller
+        ## so computing support for all contigs just wastes time
 
-        ## get seed coverage and mapq60 from this
-        calns$read.cov = out.dt[.(calns$qname), cov]
-        calns$map60.cov = out.dt[.(calns$qname), mapq60]
+        ## if(nrow(out.dt)){
+        ##     if(verbose) message("quantifying contig read support")
+        ##     if(nrow(valns)){
+        ##         ch = cgChain(calns)
+        ##     } else ch = rch
+
+        ##     ## only keep contigs that map within 1 kbp of its seed on the same strand
+        ##     if (verbose) {
+        ##         message("Checking for contigs overlapping seed region on the correct strand!")
+        ##     }
+        ##     seed = GRanges(out.dt$peak)
+        ##     strand(seed) = ifelse(grepl("for", out.dt$track), "+", "-")
+        ##     correct.seed.qnames = out.dt[!is.na(gr.match(seed,
+        ##                                                  gr.flipstrand(dt2gr(li))+pad,
+        ##                                                  ignore.strand=FALSE)), qname]
+        ##     contig.qnames = unique(out.dt[, qname])
+        ##     if (verbose) {
+        ##         message("Number of unique contig qnames: ", length(contig.qnames))
+        ##         message("Number of contig qnames overlapping correct strand: ",
+        ##                 length(correct.seed.qnames))
+        ##     }
+
+        ##     ## for each (valid) contig, get supporting reads
+        ##     supp.dat = rbindlist(lapply(contig.qnames, function (qn) {
+        ##         op = FALSE
+        ##         default.res = data.table(qname = qn,
+        ##                                  tumor.support = 0,
+        ##                                  normal.support = 0,
+        ##                                  total.support = 0,
+        ##                                  tumor.frac = 0,
+        ##                                  cov = 0,
+        ##                                  mapq60 = 0,
+        ##                                  used.cs = op)
+        ##         if(all(grepl("control", out.dt[qname == qn]$track))) {
+        ##             if (verbose) {
+        ##                 message("Skipping contig from normal reads: ", qn)
+        ##             }
+        ##             return(default.res)
+        ##         }
+        ##         if (!(qn %in% correct.seed.qnames)) {
+        ##             if (verbose) {
+        ##                 message("Contig does not overlap seed region on the correct strand.")
+        ##             }
+        ##             return(default.res)
+        ##         }
+        ##         ctigs = calns[qname == qn]
+        ##         if(nrow(ctigs)==0) {
+        ##             if (verbose) {
+        ##                 message("Skipping qname with no matching contigs: ", qn)
+        ##             }
+        ##             return(default.res)
+        ##         }
+        ##         ## identify seed region of this contig, and get overlappin reads + mates
+        ##         win = out.dt[qname == qn, GRanges(peak)]
+        ##         seed = ri[dt2gr(ri) %N% win > 0] ## which qnames overlap the peak window?
+        ##         strand(win) = ifelse(grepl("for", out.dt[qname==qn]$track), "+", "-")
+        ##         rtmp = ri[qname %in% seed$qname]
+        ##         rc = read_support(loose.end = dt2gr(li),
+        ##                           reads.dt = rtmp,
+        ##                           contigs = ctigs,
+        ##                           ref.bwa = human, ## use human BWA object
+        ##                           verbose = TRUE)
+        ##         op = TRUE
+        ##         if(!rc[, .N]) {
+        ##             if (verbose) {
+        ##                 message("Contig has no supporting reads: ", qn)
+        ##             }
+        ##             return(default.res)
+        ##         }
+        ##         ## count number of T/N supporting reads
+        ##         n.sample.reads = rtmp[sample == id & qname %in% rc$qname, .N]
+        ##         ## how many reads are from the normal sample?
+        ##         n.normal.reads = rtmp[sample != id & qname %in% rc$qname, .N]
+        ##         n.supp.reads = n.sample.reads + n.normal.reads##rtmp[qname %in% rc$qname, .N]
+        ##         if (verbose) {
+        ##             message("# supporting reads from tumor BAM: ", n.sample.reads)
+        ##             message("# supporting reads from normal BAM: ", n.normal.reads)
+        ##         }
+        ##         ## require cov/mapq60 to come specifically from tumor
+        ##         return(data.table(qname = qn,
+        ##                           tumor.support = n.sample.reads,
+        ##                           normal.support = n.normal.reads,
+        ##                           total.support = n.supp.reads,
+        ##                           tumor.frac = ifelse(n.supp.reads,
+        ##                                               n.sample.reads / n.supp.reads, 0),
+        ##                           cov = seed[sample == id & qname %in% rc$qname, .N],
+        ##                           mapq60 = seed[sample == id &
+        ##                                         qname %in% rc$qname & mapq==60, .N],
+        ##                           used.cs=op))
+        ##     }), use.names=TRUE, fill = TRUE)
+        ##     ## fill in out.dt, matching by qname
+        ##     setkey(supp.dat, "qname")
+        ##     setkey(out.dt, "qname")
+        ##     out.dt = supp.dat[out.dt] ## does not overwrite existing cov/mapq60 columns
+
+        ## } else {
+        ##     out.dt$tumor.support = numeric()
+        ##     out.dt$normal.support = numeric()
+        ##     out.dt$total.support = numeric()
+        ##     out.dt$tumor.frac = numeric()
+        ##     out.dt$cov = numeric()
+        ##     out.dt$mapq60 = numeric()
+        ## }
+
+        ## calns[, tumor.spec := qname %in% out.dt[tumor.frac==1]$qname]
+
+        ## ## transfer support info to calns
+        ## calns$tumor.frac = out.dt[.(calns$qname), tumor.frac]
+        ## calns$tumor.support = out.dt[.(calns$qname), tumor.support]
+        ## calns$normal.support = out.dt[.(calns$qname), normal.support]
+        ## calns$total.support = out.dt[.(calns$qname), total.support]
+
+        ## ## get seed coverage and mapq60 from this
+        ## calns$read.cov = out.dt[.(calns$qname), cov]
+        ## calns$map60.cov = out.dt[.(calns$qname), mapq60]
+
+        ## fill in dummy values
+        calns[, ":="(read.cov = NA, map60.cov = NA, tumor.frac = NA,
+                     tumor.support = NA, normal.support = NA, total.support = NA)]
 
         if(verbose) message("parsing contigs for telomeric matches")
         all.contigs = copy(calns)
@@ -2933,6 +3047,7 @@ call_loose_end = function(li, ri,
     if (verbose) {
         message("Building contigs")
     }
+    ## browser()
     somatic = as.logical(nrow(ri[grepl("control", track)]))
     wholseed = dt2gr(li)[,c()] + pad ##dt2gr(li)[,c()]+1e3
     if (verbose) {
@@ -2956,11 +3071,13 @@ call_loose_end = function(li, ri,
     }
 
     if (mix.tn) {
-        res = caller(li, all.contigs, ref_obj = ref_obj, return.contigs = TRUE)
+        res = caller(li, all.contigs, ref_obj = ref_obj, return.contigs = TRUE, pad = 5e3)
     } else {
         ## if not mixed, call should only be generated from tumor contigs
         res = caller(li, all.contigs[grepl('sample', track),], ref_obj = ref_obj, return.contigs = TRUE)
     }
+
+
     
     call = res$call
     filtered.contigs = res$contigs
@@ -2989,9 +3106,9 @@ call_loose_end = function(li, ri,
         ## changed from ri to ri.input for consistency
         wide.contigs = .build.tigs(ri.input, pp, li$sample, li$leix, verbose = TRUE)
         if (mix.tn) {
-            call = caller(li, wide.contigs, ref_obj=ref_obj)
+            call = caller(li, wide.contigs, ref_obj=ref_obj, pad = 5e3)
         } else {
-            call = caller(li, wide.contigs[grepl('sample', track),], ref_obj = ref_obj)
+            call = caller(li, wide.contigs[grepl('sample', track),], ref_obj = ref_obj, pad = 5e3)
         }
     }
 
@@ -3010,6 +3127,65 @@ call_loose_end = function(li, ri,
     if (exists('wide.contigs')) {
         if (inherits(wide.contigs, "data.table")) {
             res$wide.contigs = wide.contigs
+        }
+    }
+
+    if (verbose) {
+        message("Running contig support on filtered contigs!")
+    }
+
+    ## run contig support on filtered contigs
+    if (is.null(res$filtered.contigs)) {
+        if (verbose) {
+            message("No contigs remaining after filtering! Skipping contig support.")
+        }
+    } else {
+        if (!res$filtered.contigs[, .N]) {
+            message("No contigs remaining after filtering! Skipping contig support.")
+        } else {
+            ## get unique filtered contig qnames
+            unique.qnames = unique(res$filtered.contigs$qname)
+            if (verbose) {
+                message("Number of unique filtered contigs: ", length(unique.qnames))
+            }
+            supp.dt = rbindlist(
+                lapply(unique.qnames,
+                       function(qn) {
+                           message("Checking contig qname: ", qn)
+                           res = read_support(loose.end = dt2gr(li),
+                                              reads.dt = ri,
+                                              contigs = res$filtered.contigs[qname == qn],
+                                              ref.bwa = human,
+                                              verbose = TRUE,
+                                              all.reads = FALSE)
+                           if (res[, .N]) {
+                               supp.counts.dt = res[, .(tumor.support = sum(sample == id, na.rm = TRUE),
+                                                        normal.support = sum(sample != id, na.rm = TRUE),
+                                                        mapq60 = sum(sample == id & mapq == 60, na.rm = TRUE))]
+                               supp.counts.dt[, ":="(cov = tumor.support,
+                                                     total.support = tumor.support + normal.support,
+                                                     tumor.frac = ifelse(tumor.support,
+                                                                         tumor.support / (tumor.support + normal.support),
+                                                                         0))]
+                               supp.counts.dt[, qname := qn]
+                           } else {
+                               supp.counts.dt = data.table(qname = qn,
+                                                           tumor.support = 0,
+                                                           normal.support = 0,
+                                                           tumor.frac = 0,
+                                                           cov = 0,
+                                                           total.support = 0,
+                                                           mapq60 = 0)
+                           }
+                           return(supp.counts.dt)
+                       }),
+                use.names = TRUE,
+                fill = TRUE)
+            if (supp.dt[, .N]) {
+                setkey(supp.dt, "qname")
+                filtered = cbind(res$filtered.contigs, supp.dt[res$filtered.contigs$qname])
+                res$filtered.contigs = filtered
+            }
         }
     }
     return(res)
@@ -3108,7 +3284,7 @@ read_support = function(loose.end = NA, loose.end.str = NA_character_,
     }
 
     if (verbose) {
-        message("Grabbing reads overlapping contig peak")
+        message("Grabbing reads overlapping contig peak and their mates")
     }
     win = contigs.dt[1, GRanges(peak)]
     seed = reads.dt[dt2gr(reads.dt) %^% (win + seed.pad)] ## which qnames overlap the peak window?
