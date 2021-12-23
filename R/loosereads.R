@@ -416,6 +416,7 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
     aln.reads = aln.reads[, query.id := qid][!is.na(query.id)]
     aln.reads[(!is.na(query.id)), ":="(R1 = reads.dt$R1[query.id],
                                        R2 = reads.dt$R2[query.id])]
+
     
     ## for unaligned reads, also get the index and store that as query.id
     unaln.reads.ix = which(is.na(match(reads.dt$seq, aln.reads$reading.frame)))
