@@ -114,6 +114,8 @@ test_that(desc = "check loose read merging and annotation", code = {
             expect_true(length(intersect(qnames, loosereads.res$qname)) > 0)
             ## check that read and mate are both present
             expect_true(all(loosereads.res[, .N, by = qname]$N == 2))
+            ## check that no NA sequences
+            expect_false(any(is.na(loosereads.res[, seq])))
             
             filtered.res = loose.reads2(tbam = loosereads.bam,
                                         taln = aln.bam,
