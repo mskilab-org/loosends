@@ -8,11 +8,17 @@ ref = "~/DB/hg19/human_g1k_v37_decoy.fasta"
 ## files for first test case
 loosereads.bam = system.file("tests", "testthat", "data", "loosereads_1", "loosereads.bam", package = "loosends")
 aln.bam = system.file("tests", "testthat", "data", "loosereads_1", "aln.bam", package = "loosends")
+normal.loosereads.bam = system.file("tests", "testthat", "data", "loosereads_1_normal", "loosereads.bam", package = "loosends")
+normal.aln.bam = system.file("tests", "testthat", "data", "loosereads_1_normal", "aln.bam", package = "loosends")
 qnames.txt = system.file("tests", "testthat", "data", "loosereads_1", "qnames.txt", package = "loosends")
 windows.bed = system.file("tests", "testthat", "data", "loosereads_1", "windows.bed", package = "loosends")
 
 ## loci for first test case
 this.le = parse.gr("20:60158837-")
+
+## test sample name for the first test case
+this.pair = "G32831.HCC1954"
+this.pair.normal = "G32831.HCC1954N"
 
 ## expected results for the first test case
 qnames = readLines(con = qnames.txt)
@@ -122,6 +128,27 @@ test_that(desc = "check loose read merging and annotation", code = {
             expect_true(all(filtered.res[, loose.pair]))
             expect_true(all(filtered.res[(high.mate), mapq] >= 50))
             expect_true(all(filtered.res[(!high.mate), is.na(mapq) | mapq == 0]))
+        }
+    )
+})
+
+## test loose read merging and annotation with matched normal
+test_that(desc = "check loose read annotation with matched normal", code = {
+    suppressWarnings(
+        expr = {
+            full.loosereads.res = loose.reads2(tbam = loosereads.bam,
+                                          taln = aln.bam,
+                                          nbam = normal.loosereads.bam,
+                                          naln = normal.aln.bam,
+                                          id = this.pair,
+                                          filter = FALSE,
+                                          verbose = FALSE)
+
+            ## check that mate and seed are present
+            expect_true(all(full.loosereads.res[, .N, by = .(sample, qname)]$N == 2))
+            ## check that sample and matched normal both present
+            expect_true(this.pair %in% full.loosereads.res$sample &
+                        this.pair.normal %in% full.loosereads.res$sample)
         }
     )
 })
