@@ -411,11 +411,10 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
 
     ## for each aligned read, get the index of the original read and store as query.id
     qid = match(paste(aln.reads$qname, aln.reads$reading.frame), paste(reads.dt$qname, reads.dt$seq))
-    ## qid = match(paste(aln.reads$qname, aln.reads$R1, sep = "_"),
-    ## paste(reads.dt$qname, reads.dt$R1, sep = "_"))
     aln.reads = aln.reads[, query.id := qid][!is.na(query.id)]
     aln.reads[(!is.na(query.id)), ":="(R1 = reads.dt$R1[query.id],
-                                       R2 = reads.dt$R2[query.id])]
+                                       R2 = reads.dt$R2[query.id],
+                                       flag = reads.dt$flag[query.id])] ## keep original flag?
 
     
     ## for unaligned reads, also get the index and store that as query.id
