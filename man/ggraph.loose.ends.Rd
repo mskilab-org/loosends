@@ -17,7 +17,9 @@ ggraph.loose.ends(
   PTHRESH = 3.4e-07,
   verbose = F,
   mc.cores = 1,
-  ref_dir = system.file("extdata", "hg19_looseends", package = "loosends")
+  ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"),
+  ref_obj = NULL,
+  overwrite = FALSE
 )
 }
 \arguments{
@@ -46,6 +48,8 @@ ggraph.loose.ends(
 \item{mc.cores}{optional, parallel cores for building contigs per loose end, default=1}
 
 \item{ref_dir}{optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'}
+
+\item{overwrite, }{optional, logical indicating whether to generate new output files if corresponding files have already been written to outdir, default=FALSE (will load existing files)}
 }
 \description{
 this function processes a single gGraph to identify

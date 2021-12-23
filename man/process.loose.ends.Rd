@@ -12,7 +12,9 @@ process.loose.ends(
   outdir = NULL,
   mc.cores = 1,
   ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"),
-  verbose = FALSE
+  ref_obj = NULL,
+  verbose = FALSE,
+  overwrite = FALSE
 )
 }
 \arguments{
@@ -31,6 +33,8 @@ process.loose.ends(
 \item{ref_dir}{optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'}
 
 \item{verbose}{optional, default=FALSE}
+
+\item{overwrite, }{optional, logical indicating whether to generate new output files if corresponding files have already been written to outdir, default=FALSE (will load existing files)}
 }
 \description{
 this function categorizes an input set of loose ends

@@ -266,6 +266,12 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
 
     ## readsc is a data.table that denotes read locations in contig coordinates
     readsc = bwa.contig[reads$seq] %>% gr2dt
+
+    ## important! if no reads align to the contig then the following will fail!
+    if (!nrow(readsc)) {
+        return(reads[c()])
+    }
+    
     readsc$cigar = as.character(readsc$cigar)
     readsc$ix = as.integer(as.character(readsc$qname))
     readsc$R1 = reads$R1[readsc$ix]
@@ -2484,182 +2490,137 @@ process.single.end = function(li, tbam, nbam=NULL, id=NULL, outdir=NULL, ref_dir
     return(reads)
 }
 
-#' .realign
-#'
-#' @description
-#' realigns reads and their mates single-end to attach individual MAPQs
-#' 
-#' @param reads (GRanges or data.table) reads from BAM file with $seq in original reading frame
-#' @param ref (BWA object from RSeqLib) reference genome for realignment
-#' @param gg (gGraph) sample used to identify sequences fitted in graph, default=NULL
-#' @param filter (logical) return loose reads pairs only? default TRUE
-#' @param chunksize (numeric) perform realignment in chunks to help with memory. default 1e6
-#' @param verbose optional, default=FALSE
-.realign = function(reads, ref, gg=NULL, filter=TRUE, verbose=F, chunksize = 5e5){
-    if(!is.null(gg)){
-        seqs = unique(seqnames(gg$nodes[!is.na(cn)]$gr))
-    } else {
-        seqs = c(1:22, "X", "Y")
-        if(any(grepl("chr", seqlevels(ref)))) seqs = gr.chr(seqs)
-    }
+## #' .realign
+## #'
+## #' @description
+## #' realigns reads and their mates single-end to attach individual MAPQs
+## #' 
+## #' @param reads (GRanges or data.table) reads from BAM file with $seq in original reading frame
+## #' @param ref (BWA object from RSeqLib) reference genome for realignment
+## #' @param gg (gGraph) sample used to identify sequences fitted in graph, default=NULL
+## #' @param filter (logical) return loose reads pairs only? default TRUE
+## #' @param chunksize (numeric) perform realignment in chunks to help with memory. default 1e6
+## #' @param verbose optional, default=FALSE
+## .realign = function(reads, ref, gg=NULL, filter=TRUE, verbose=F, chunksize = 5e5){
+##     if(!is.null(gg)){
+##         seqs = unique(seqnames(gg$nodes[!is.na(cn)]$gr))
+##     } else {
+##         seqs = c(1:22, "X", "Y")
+##         if(any(grepl("chr", seqlevels(ref)))) seqs = gr.chr(seqs)
+##     }
 
-    ## realign ALL reads if not filtering for loose pairs
-    ## otherwise, realign just the low MAPQ read in the pair
-    if(filter){
-        qni = as.data.table(reads)[is.na(mapq) | mapq<50 | is.na(MQ), (unique(qname))]
-    } else{
-        qni = unique(reads$qname)
-    }
+##     ## realign ALL reads if not filtering for loose pairs
+##     ## otherwise, realign just the low MAPQ read in the pair
+##     if(filter){
+##         qni = as.data.table(reads)[is.na(mapq) | mapq<50 | is.na(MQ), (unique(qname))]
+##     } else{
+##         qni = unique(reads$qname)
+##     }
 
-    ## start realignment (in chunks)
-    redo = reads$qname %in% qni
-    if(verbose) {
-        message(paste("realigning", sum(redo), "reads"))
-    }
+##     ## start realignment (in chunks)
+##     redo = reads$qname %in% qni
+##     if(verbose) {
+##         message(paste("realigning", sum(redo), "reads"))
+##     }
     
-    ## do realignment in chunks to help with memory
-    seqs.for.realignment = setNames(reads$seq, 1:length(reads))
-    ix.for.realignment = which(redo)
-    nchunks = ceiling(sum(redo) / chunksize)
-    realn = data.table()
-    for (chunk in 1:nchunks) {
-        starti = (chunk - 1) * chunksize + 1
-        endi = pmin(sum(redo), (chunk * chunksize))
-        if (verbose) {
-            message("Chunk start: ", starti)
-            message("Chunk end: ", endi)
-            message("Chunk ", chunk, " of ", nchunks)
-        }
-        realni = ref[seqs.for.realignment[ix.for.realignment[starti:endi]]]
-        gc()
-        realn = rbind(realn, as.data.table(realni), use.names = TRUE, fill = TRUE)
-        ## remove unneeded variables to help with memory footprint
-        rm(realni)
-        gc()
-    }
+##     ## do realignment in chunks to help with memory
+##     seqs.for.realignment = setNames(reads$seq, 1:length(reads))
+##     ix.for.realignment = which(redo)
+##     nchunks = ceiling(sum(redo) / chunksize)
+##     realn = data.table()
+##     for (chunk in 1:nchunks) {
+##         starti = (chunk - 1) * chunksize + 1
+##         endi = pmin(sum(redo), (chunk * chunksize))
+##         if (verbose) {
+##             message("Chunk start: ", starti)
+##             message("Chunk end: ", endi)
+##             message("Chunk ", chunk, " of ", nchunks)
+##         }
+##         realni = ref[seqs.for.realignment[ix.for.realignment[starti:endi]]]
+##         gc()
+##         realn = rbind(realn, as.data.table(realni), use.names = TRUE, fill = TRUE)
+##         ## remove unneeded variables to help with memory footprint
+##         rm(realni)
+##         gc()
+##     }
     
-    ## recast as GRanges since legacy code expects that
-    realn = dt2gr(realn)
-    ## realn = ref[setNames(reads$seq, 1:length(reads))[redo]]
-    realn$mapq = as.integer(realn$mapq)
-    realn$query.id = as.integer(realn$qname); realn$qname = reads[realn$query.id]$qname
-    values(realn) = cbind(values(realn), values(reads[realn$query.id, !(colnames(values(reads)) %in% colnames(values(realn)))]))
+##     ## recast as GRanges since legacy code expects that
+##     realn = dt2gr(realn)
+##     ## realn = ref[setNames(reads$seq, 1:length(reads))[redo]]
+##     realn$mapq = as.integer(realn$mapq)
+##     realn$query.id = as.integer(realn$qname); realn$qname = reads[realn$query.id]$qname
+##     values(realn) = cbind(values(realn), values(reads[realn$query.id, !(colnames(values(reads)) %in% colnames(values(realn)))]))
 
-    ## keep track of the unaligned reads that didn't appear in the GRanges from BWA
-    uix = ! ( (1:length(reads))[redo] %in% realn$query.id )
-    uix = (1:length(reads))[redo][uix]
-    unaln = as.data.table(reads[uix])
-    unaln[, ":="(
-        seqnames = "*",
-        start = 1,
-        end = 0,
-        flag = ifelse(R1, 69, 113),
-        mapq = 0,
-        query.id = uix)]
+##     ## keep track of the unaligned reads that didn't appear in the GRanges from BWA
+##     uix = ! ( (1:length(reads))[redo] %in% realn$query.id )
+##     uix = (1:length(reads))[redo][uix]
+##     unaln = as.data.table(reads[uix])
+##     unaln[, ":="(
+##         seqnames = "*",
+##         start = 1,
+##         end = 0,
+##         flag = ifelse(R1, 69, 113),
+##         mapq = 0,
+##         query.id = uix)]
 
-    ## final reads are the realigned reads in new genomic coordanates + unaligned reads
-    ## in addition, the original sequence + realignment mapqs are stored
-    realn = rbind(as.data.table(realn), unaln, fill=T, use.names=TRUE)
-    realn$reading.frame = reads[realn$query.id]$seq
-    realn$mapq = as.integer(realn$mapq)
-    realn[, mapq := ifelse(!(seqnames %in% seqs), as.integer(0), mapq), by=query.id]
-    realn = realn[rev(order(mapq))][!duplicated(query.id), ]
-    gc()
-    realn[, MQ := ifelse(rep(.N, .N)==1, as.integer(NA), c(mapq[-1], mapq[1])), by=qname]
-    cols = c(colnames(realn)[colnames(realn) %in% colnames(as.data.table(reads))], "reading.frame", "AS")
-    realn = realn[, cols, with=F]
+##     ## final reads are the realigned reads in new genomic coordanates + unaligned reads
+##     ## in addition, the original sequence + realignment mapqs are stored
+##     realn = rbind(as.data.table(realn), unaln, fill=T, use.names=TRUE)
+##     realn$reading.frame = reads[realn$query.id]$seq
+##     realn$mapq = as.integer(realn$mapq)
+##     realn[, mapq := ifelse(!(seqnames %in% seqs), as.integer(0), mapq), by=query.id]
+##     realn = realn[rev(order(mapq))][!duplicated(query.id), ]
+##     gc()
+##     realn[, MQ := ifelse(rep(.N, .N)==1, as.integer(NA), c(mapq[-1], mapq[1])), by=qname]
+##     cols = c(colnames(realn)[colnames(realn) %in% colnames(as.data.table(reads))], "reading.frame", "AS")
+##     realn = realn[, cols, with=F]
 
-    ## annotate whether the read belongs to a loose read pair
-    lqn = realn[mapq>50 & (is.na(MQ) | MQ < 1), qname]
-    if(filter){
-        realn = realn[qname %in% lqn,]
-        realn[, loose.pair := TRUE]
-    } else realn[, loose.pair := qname %in% lqn]
-    realn[, high.mate := mapq>50 & (is.na(MQ) | MQ < 1)]
-    gc()
-    return(realn)
-}
+##     ## annotate whether the read belongs to a loose read pair
+##     lqn = realn[mapq>50 & (is.na(MQ) | MQ < 1), qname]
+##     if(filter){
+##         realn = realn[qname %in% lqn,]
+##         realn[, loose.pair := TRUE]
+##     } else realn[, loose.pair := qname %in% lqn]
+##     realn[, high.mate := mapq>50 & (is.na(MQ) | MQ < 1)]
+##     gc()
+##     return(realn)
+## }
 
-#' @name loose.reads2
-#' @title loose.reads2
-#'
-#' @description
-#' 
-#' Performs the following:
-#' - loads reads from a specified window around loose end
-#' - identifies any split reads and loads the "sides" of those reads as well
-#' - loads the mates of reads around the loose end (by qname)
-#' - realigns all of these reads
-#'
-#' The supplied BAM files are expected to have tag SA (indicated split alignments)
-#' The functionality is identical to loose.reads; however, the BAMs are expected to be prefiltered to contain only the relevant QNAMEs via samtools to avoid slow filtering in R for reads with many mate windows
-#'
-#' @param tbam character path to tumor BAM file
-#' @param nbam optional, character path to normal BAM file, default=NULL
-#' @param ref optional, BWA object of reference genome for realignment or path to fasta, default=package/extdata/hg19_looseends/human_g1k_v37_decoy.fasta
-#' @param filter optional, logical filter=TRUE returns loose read pairs only, filter=FALSE returns all read pairs annotated with logical $loose column, default=T
-#' @param gg optional, gGraph corresponding to sample, used to identify sequences fitted in graph, default=NULL
-#' @param verbose optional, default=FALSE
-#'
-#' @return data.table of reads relaigned to the specified reference
-#' @export
-loose.reads2 = function(tbam, nbam=NA, id="", ref=system.file('extdata', 'hg19_looseends', 'human_g1k_v37_decoy.fasta', package='loosends'), filter=TRUE, gg=NULL, verbose=FALSE){
-    if(inherits(ref, "character")) {
-        if(!file.exists(ref)) {
-            stop("Provide reference BWA object or path to reference fasta for loose.reads")
-        }
-        ref = RSeqLib::BWA(fasta=ref)
-    }
-    if(is.na(nbam)) nbam = NULL
-    treads = .sample.spec2(tbam, verbose = verbose)
-    realn = .realign(treads, ref, filter=filter, gg=gg, verbose=verbose)
-    realn$sample = id
-    gc()
 
-    if(!is.null(nbam) && !is.na(nbam) && file.exists(nbam) && file.info(nbam)$size){
-        nreads = .sample.spec2(nbam, verbose = verbose)
-        nrealn = .realign(nreads, ref, filter=filter, gg=gg, verbose=verbose)
-        nrealn$sample = paste0(id, "N")
-        gc()
-        return(rbind(realn, nrealn, fill=TRUE, use.names=TRUE))
-    }
-    return(realn)
-}
+## #' loose.reads
+## #'
+## #' loads and reads and their mates from given windows and realigns single end for read-specific MAPQ
+## #' @param le GRanges or data.table windows around which to sesarch for reads
+## #' @param tbam character path to tumor BAM file
+## #' @param pad optional, integer padding around le windows, default=25e3
+## #' @param nbam optional, character path to normal BAM file, default=NULL
+## #' @param ref optional, BWA object of reference genome for realignment or path to fasta, default=package/extdata/hg19_looseends/human_g1k_v37_decoy.fasta
+## #' @param filter optional, logical filter=TRUE returns loose read pairs only, filter=FALSE returns all read pairs annotated with logical $loose column, default=T
+## #' @param gg optional, gGraph corresponding to sample, used to identify sequences fitted in graph, default=NULL
+## #' @param verbose optional, default=FALSE
+## #' @export
+## loose.reads = function(le, tbam, pad=25e3, nbam=NA, ref=system.file('extdata', 'hg19_looseends', 'human_g1k_v37_decoy.fasta', package='loosends'), filter=TRUE, gg=NULL, verbose=FALSE){
+##     le = copy(le)
+##     if(inherits(ref, "character")){
+##         if(!file.exists(ref)) stop("Provide reference BWA object or path to reference fasta for loose.reads")
+##         ref = RSeqLib::BWA(fasta=ref)
+##     }
+##     if(is.na(nbam)) nbam = NULL
+##     id = le[1]$sample
+##     treads = .sample.spec(copy(le), tbam, pad, verbose=verbose)
+##     realn = .realign(treads, ref, filter=filter, gg=gg, verbose=verbose)
+##     realn$sample = id
 
-#' loose.reads
-#'
-#' loads and reads and their mates from given windows and realigns single end for read-specific MAPQ
-#' @param le GRanges or data.table windows around which to sesarch for reads
-#' @param tbam character path to tumor BAM file
-#' @param pad optional, integer padding around le windows, default=25e3
-#' @param nbam optional, character path to normal BAM file, default=NULL
-#' @param ref optional, BWA object of reference genome for realignment or path to fasta, default=package/extdata/hg19_looseends/human_g1k_v37_decoy.fasta
-#' @param filter optional, logical filter=TRUE returns loose read pairs only, filter=FALSE returns all read pairs annotated with logical $loose column, default=T
-#' @param gg optional, gGraph corresponding to sample, used to identify sequences fitted in graph, default=NULL
-#' @param verbose optional, default=FALSE
-#' @export
-loose.reads = function(le, tbam, pad=25e3, nbam=NA, ref=system.file('extdata', 'hg19_looseends', 'human_g1k_v37_decoy.fasta', package='loosends'), filter=TRUE, gg=NULL, verbose=FALSE){
-    le = copy(le)
-    if(inherits(ref, "character")){
-        if(!file.exists(ref)) stop("Provide reference BWA object or path to reference fasta for loose.reads")
-        ref = RSeqLib::BWA(fasta=ref)
-    }
-    if(is.na(nbam)) nbam = NULL
-    id = le[1]$sample
-    treads = .sample.spec(copy(le), tbam, pad, verbose=verbose)
-    realn = .realign(treads, ref, filter=filter, gg=gg, verbose=verbose)
-    realn$sample = id
-
-    if(!is.null(nbam)){
-        nreads = .sample.spec(copy(le), nbam, pad, verbose=verbose)
-        nrealn = .realign(nreads, ref, filter=filter, gg=gg, verbose=verbose)
-        nrealn$sample = paste0(id, "N")
-        gc()
-        return(rbind(realn, nrealn, fill=TRUE, use.names=TRUE))
-    }
-    gc()
-    return(realn)
-}
+##     if(!is.null(nbam)){
+##         nreads = .sample.spec(copy(le), nbam, pad, verbose=verbose)
+##         nrealn = .realign(nreads, ref, filter=filter, gg=gg, verbose=verbose)
+##         nrealn$sample = paste0(id, "N")
+##         gc()
+##         return(rbind(realn, nrealn, fill=TRUE, use.names=TRUE))
+##     }
+##     gc()
+##     return(realn)
+## }
 
 
 #' @name prep_loose_reads
@@ -2700,17 +2661,24 @@ prep_loose_reads = function(li, loose.reads.dt) {
     ri$leix = li$leix
 
     ## denote sample vs. control
-    ri[, track := paste(ifelse(sample == li$sample, "sample", "control"), ifelse(strand == "+", "for", "rev"), sep=".")]
+    ri[, track := paste(ifelse(sample == li$sample, "sample", "control"),
+                        ifelse(strand == "+", "for", "rev"), sep=".")]
     ri[, concord := !(loose.pair) & .N == 2 & length(unique(seqnames)) == 1 & strand[R1] != strand[R2] & strand[start == min(start)]=="+" & min(start) + 3e3 > max(start), by=qname]
     ri[, anchor := (loose.pair & high.mate) | ( !(loose.pair) & mapq > 50 & !(concord))]
     ri$seq = as.character(ri$seq)
     ri$start = as.integer(ri$start)
     ri$end = as.integer(ri$end)
     ri$flag = as.integer(ri$flag)
-    if(!("reading.frame" %in% colnames(ri))){
-        ri$reading.frame = ri$seq
-        ri[strand == "-", reading.frame := as.character(reverseComplement(DNAStringSet(reading.frame)))]
-    }
+
+    ## remove short sequences
+    median.nchar = median(nchar(ri$seq))
+    ri = ri[(nchar(seq) >= median.nchar),]
+
+    ## doe this regardless
+    ## if(!("reading.frame" %in% colnames(ri))){
+    ri$reading.frame = ri$seq
+    ri[strand == "-", reading.frame := as.character(reverseComplement(DNAStringSet(reading.frame)))]
+    ##}
 
     return(ri)
 }
@@ -2785,6 +2753,7 @@ assemble_loose_reads = function(li,
 #' @param ref_obj (character) or a list of BWA indices, if ref_dir not provided
 #' @param pad (numeric) window size for local assembly, default 1 kbp
 #' @param mix.tn (logical) mix tumor/normal reads before assembly
+#' @param max.reads (logical) maximum number of reads before downsampling (default 5000)
 #' @param verbose
 #'
 #' @return list with entries
@@ -2796,6 +2765,7 @@ call_loose_end = function(li, ri,
                           ref_obj = NULL,
                           pad = 1e3,
                           mix.tn = FALSE,
+                          max.reads = 2500,
                           verbose = FALSE) {
     
     if(is.null(ref_obj)){
@@ -3063,6 +3033,18 @@ call_loose_end = function(li, ri,
         }
         ri.input$track = NULL ## set track to null so that assembly is sample-agnostic
     }
+    ## check if reads need to be downsampled before assembly
+    if (ri.input[, .N]) {
+        n.qn = length(unique(ri.input[, qname]))
+        message("Number of unique read qnames for assembly: ", n.qn)
+        if (n.qn > max.reads) {
+            if (verbose) {
+                message("Downsampling reads to max # qnames: ", max.reads)
+            }
+            keep.qn = sample(unique(ri.input[, qname]), max.reads, replace = FALSE)
+            ri.input = ri.input[qname %in% keep.qn,]
+        }
+    }
     all.contigs = .build.tigs(ri.input, pp, li$sample, li$leix, verbose = TRUE)
 
     ## also save the filtered contigs
@@ -3127,65 +3109,6 @@ call_loose_end = function(li, ri,
     if (exists('wide.contigs')) {
         if (inherits(wide.contigs, "data.table")) {
             res$wide.contigs = wide.contigs
-        }
-    }
-
-    if (verbose) {
-        message("Running contig support on filtered contigs!")
-    }
-
-    ## run contig support on filtered contigs
-    if (is.null(res$filtered.contigs)) {
-        if (verbose) {
-            message("No contigs remaining after filtering! Skipping contig support.")
-        }
-    } else {
-        if (!res$filtered.contigs[, .N]) {
-            message("No contigs remaining after filtering! Skipping contig support.")
-        } else {
-            ## get unique filtered contig qnames
-            unique.qnames = unique(res$filtered.contigs$qname)
-            if (verbose) {
-                message("Number of unique filtered contigs: ", length(unique.qnames))
-            }
-            supp.dt = rbindlist(
-                lapply(unique.qnames,
-                       function(qn) {
-                           message("Checking contig qname: ", qn)
-                           res = read_support(loose.end = dt2gr(li),
-                                              reads.dt = ri,
-                                              contigs = res$filtered.contigs[qname == qn],
-                                              ref.bwa = human,
-                                              verbose = TRUE,
-                                              all.reads = FALSE)
-                           if (res[, .N]) {
-                               supp.counts.dt = res[, .(tumor.support = sum(sample == id, na.rm = TRUE),
-                                                        normal.support = sum(sample != id, na.rm = TRUE),
-                                                        mapq60 = sum(sample == id & mapq == 60, na.rm = TRUE))]
-                               supp.counts.dt[, ":="(cov = tumor.support,
-                                                     total.support = tumor.support + normal.support,
-                                                     tumor.frac = ifelse(tumor.support,
-                                                                         tumor.support / (tumor.support + normal.support),
-                                                                         0))]
-                               supp.counts.dt[, qname := qn]
-                           } else {
-                               supp.counts.dt = data.table(qname = qn,
-                                                           tumor.support = 0,
-                                                           normal.support = 0,
-                                                           tumor.frac = 0,
-                                                           cov = 0,
-                                                           total.support = 0,
-                                                           mapq60 = 0)
-                           }
-                           return(supp.counts.dt)
-                       }),
-                use.names = TRUE,
-                fill = TRUE)
-            if (supp.dt[, .N]) {
-                setkey(supp.dt, "qname")
-                filtered = cbind(res$filtered.contigs, supp.dt[res$filtered.contigs$qname])
-                res$filtered.contigs = filtered
-            }
         }
     }
     return(res)
