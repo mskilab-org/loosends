@@ -18,6 +18,10 @@ check_file = function(fn = NULL) {
         return(FALSE)
     }
 
+    if (is.na(fn)) {
+        return(FALSE)
+    }
+
     if (!file.exists(fn)) {
         return(FALSE)
     }
@@ -342,33 +346,19 @@ realign_loosereads = function(bam, ref = system.file('extdata', 'hg19_looseends'
 #'
 #' @param tbam character path to tumor BAM file
 #' @param nbam optional, character path to normal BAM file, default=NULL
-#' @param ref optional, BWA object of reference genome for realignment or path to fasta, default=package/extdata/hg19_looseends/human_g1k_v37_decoy.fasta
-#' @param filter optional, logical filter=TRUE returns loose read pairs only, filter=FALSE returns all read pairs annotated with logical $loose column, default=T
-#' @param gg optional, gGraph corresponding to sample, used to identify sequences fitted in graph, default=NULL
+#' @param filter (logical) return loose read pairs only? default FALSE
 #' @param verbose optional, default=FALSE
 #'
 #' @return data.table of reads relaigned to the specified reference
 #' @export
-loose.reads2 = function(tbam, taln, nbam=NA, naln=NA, id="", ref=system.file('extdata', 'hg19_looseends', 'human_g1k_v37_decoy.fasta', package='loosends'), filter=TRUE, gg=NULL, verbose=FALSE){
-    ## if(inherits(ref, "character")) {
-    ##     if(!file.exists(ref)) {
-    ##         stop("Provide reference BWA object or path to reference fasta for loose.reads")
-    ##     }
-    ##     ref = RSeqLib::BWA(fasta=ref)
-    ## }
-    if(is.na(nbam)) nbam = NULL
+loose.reads2 = function(tbam, taln, nbam=NA, naln=NA, id="", filter=FALSE, verbose=FALSE){
     treads = .sample.spec2(tbam, verbose = verbose)
     realn = parse_realignment(treads, aln_bam = taln, filter = filter, verbose = verbose)
-    ## realn = .realign(treads, ref, filter=filter, gg=gg, verbose=verbose)
     realn$sample = id
-    gc()
-
-    if(!is.null(nbam) && !is.na(nbam) && file.exists(nbam) && file.info(nbam)$size){
+    if(check_file(nbam) && check_file(naln)) {
         nreads = .sample.spec2(nbam, verbose = verbose)
-        ## nrealn = .realign(nreads, ref, filter=filter, gg=gg, verbose=verbose)
         nrealn = parse_realignment(nreads, aln_bam = naln, filter = filter, verbose = verbose)
         nrealn$sample = paste0(id, "N")
-        gc()
         return(rbind(realn, nrealn, fill=TRUE, use.names=TRUE))
     }
     return(realn)
