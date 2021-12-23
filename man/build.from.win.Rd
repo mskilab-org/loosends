@@ -4,7 +4,7 @@
 \alias{build.from.win}
 \title{build.from.win}
 \usage{
-build.from.win(win, ri, tracks = NULL)
+build.from.win(win, ri, tracks = NULL, verbose = FALSE, align.thres = 0.9)
 }
 \arguments{
 \item{win}{GRanges seed window}
@@ -12,6 +12,8 @@ build.from.win(win, ri, tracks = NULL)
 \item{ri}{data.table reads and their mates}
 
 \item{tracks}{optional, character which tracks (sample + strand) to assemble, default all}
+
+\item{align.thres}{(numeric) width of alignment / number of non-N characters}
 }
 \description{
 assembles strand-specific reads and their mates into contigs and counts read support per contig within a single seed window

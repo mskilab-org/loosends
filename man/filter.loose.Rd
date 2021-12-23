@@ -4,14 +4,23 @@
 \alias{filter.loose}
 \title{filter.loose}
 \usage{
-\method{filter}{loose}(
+filter.loose(
   gg,
   cov.rds,
   l,
+  jabba_rds = NULL,
   purity = NULL,
   ploidy = NULL,
   field = "ratio",
   PTHRESH = 3.4e-07,
+  waviness = TRUE,
+  cov.delta = TRUE,
+  tumor.delta = TRUE,
+  normal.delta = TRUE,
+  p.filter = TRUE,
+  fdr = 0.05,
+  epgap = 0.001,
+  ascat = "/dev/null",
   verbose = F
 )
 }
@@ -22,13 +31,29 @@
 
 \item{l}{data.table of loose ends to evaluate}
 
-\item{purity}{optional, fractional purity of sample, default assumes 1}
+\item{jabba_rds}{(character) load gg and l directly from jabba output}
+
+\item{purity}{optional, fractional purity of sample, default infers from gg}
 
 \item{ploidy}{optional, ploidy of sample, default infers from gg}
 
 \item{field}{optional, column name in cov.rds, default="ratio"}
 
 \item{PTHRESH}{optional, threshold for GLM p-value for calling true positive loose ends, default=3.4e-7 provides consanguinity with large dataset bonferroni correction}
+
+\item{waviness}{(logical) apply waviness filter? default TRUE}
+
+\item{cov.delta}{(logical) apply filters on coverage ratio delta? default TRUE}
+
+\item{tumor.delta}{(logical) apply filters on coverage ratio delta? default TRUE}
+
+\item{normal.delta}{(logical) apply filters on coverage ratio delta? default TRUE}
+
+\item{fdr}{(numeric) false discovery rate, default 0.05}
+
+\item{epgap}{(numeric) epgap threshold, default 1e-3}
+
+\item{ascat}{(character) path to ASCAT segmentation, default /dev/null}
 
 \item{verbose}{optional, default=FALSE}
 }

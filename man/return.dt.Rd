@@ -15,9 +15,40 @@ return.dt(
   novmap = NULL,
   rrep = NULL,
   irep = NULL,
-  nrep = NULL
+  nrep = NULL,
+  seed.only = NA,
+  mate.only = NA,
+  junction = ""
 )
 }
+\arguments{
+\item{reference}{(logical) reference alignment?}
+
+\item{complex}{(logical) complex rearrangement?}
+
+\item{missedj}{(logical) type 0 loose end}
+
+\item{novel}{(logical) contains unaligned sequence?}
+
+\item{mystery}{(logical) either seed or mate is mystery}
+
+\item{insertion}{(logical) contig contain insertion?}
+
+\item{refmap}{(logical) seed alignment is mappable}
+
+\item{novmap}{(logical) mate alignment is mappable}
+
+\item{rrep}{(logical) type of reference (human) repeat}
+
+\item{irep}{(logical) non-reference (non-human) repeat}
+
+\item{seed.only}{(logical) contig overlaps seed region completely}
+
+\item{mate.only}{(logical) contig does not overlap seed region at all}
+
+\item{junction}{(character)
+constructs output data.table from logical arguments}
+}
 \description{
-constructs output data.table from logical arguments
+construct loose end call from a set of binary inputs
 }

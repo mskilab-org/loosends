@@ -4,7 +4,7 @@
 \alias{filter.graph}
 \title{filter.graph}
 \usage{
-\method{filter}{graph}(
+filter.graph(
   gg,
   cov.rds,
   purity = NULL,

@@ -11,7 +11,9 @@ process.single.end(
   id = NULL,
   outdir = NULL,
   ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"),
-  verbose = FALSE
+  ref_obj = NULL,
+  verbose = FALSE,
+  overwrite = FALSE
 )
 }
 \arguments{
@@ -32,7 +34,11 @@ leix.call.rds -- contains one row data.table describing categorization of provid
 
 \item{ref_dir}{optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'}
 
+\item{ref_obj}{optional, list of BWA objects built from ref_dir fastas, names must match expected "human" "rep" "polyA" "microbe", default=NULL}
+
 \item{verbose}{optional, default=FALSE}
+
+\item{overwrite, }{optional, logical indicating whether to generate new output files if corresponding files have already been written to outdir, default=FALSE (will load existing files)}
 }
 \value{
 one row data table describing categorization of provided loose end li
