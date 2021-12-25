@@ -4,6 +4,7 @@
 #' @param le.dt (full output from prep_loose_ends)
 #' @param reads.dt (full output from prep_loose_reads)
 #' @param contigs.dt ($filtered.contigs from call_loose_end)
+#' @param id (character) sample id
 #' @param ref.bwa (human output from grab_ref_obj)
 #' @param verbose (logical)
 #'
@@ -18,6 +19,7 @@
 read_support_wrapper = function(le.dt = data.table(),
                                 reads.dt = data.table(),
                                 contigs.dt = data.table(),
+                                id = "",
                                 ref.bwa = NULL,
                                 verbose = FALSE) {
 
@@ -37,17 +39,49 @@ read_support_wrapper = function(le.dt = data.table(),
         return(empty.res)
     }
 
-    if (!contigs.dt) {
+    if (!contigs.dt[, .N]) {
         return(empty.res)
     }
 
     unique.leix = unique(contigs.dt$leix)
-    res = lapply(unique.leix,
-                 function(lx) {
-                     unique.qname = unique(this.contigs[leix == lx, qname])
-                     res = lapply(unique.qname)
-                 })
-    
+    full.res = lapply(unique.leix,
+                      function(lx) {
+                          ## get loose end associated with this leix
+                          this.le = le.dt[leix == lx]
+                          ## get qnames associated with this leix
+                          unique.qname = unique(contigs.dt[leix == lx, qname])
+                          res = lapply(unique.qname, function(qn) {
+                              ## grab correct contigs
+                              this.contigs = contigs.dt[qname == qn]
+                              rc = read_support(le.dt = this.le,
+                                                reads.dt = reads.dt,
+                                                contigs.dt = this.contigs,
+                                                ref.bwa = ref.bwa,
+                                                verbose = verbose)
+                              if (rc[, .N]) {
+                                  out = data.table(leix = lx,
+                                                   loose.end = this.le[, paste0(seqnames, ":", start, strand)],
+                                                   contig.qname = qn,
+                                                   tumor.count = rc[sample == id, .N],
+                                                   normal.count = rc[sample != id, .N],
+                                                   total.count = rc[, .N],
+                                                   tumor.frac = rc[, sum(sample == id)/.N])
+                              } else {
+                                  out = data.table(leix = lx,
+                                                   loose.end = this.le[, paste0(seqnames, ":", start, strand)],
+                                                   contig.qname = qn,
+                                                   tumor.count = 0,
+                                                   normal.count = 0,
+                                                   total.count = 0,
+                                                   tumor.frac = 0)
+                              }
+                              return(out)                    
+                          })
+                          res = rbindlist(res, use.names = TRUE, fill = TRUE)
+                          return(res)
+                      })
+    full.res = rbindlist(full.res, use.names = TRUE, fill = TRUE)
+    return(full.res)
 }
 
 #' @name read_support
@@ -70,7 +104,7 @@ read_support_wrapper = function(le.dt = data.table(),
 #' @return data.table of candidate reads
 #' if all.reads is FALSE and there are no supporting reads an empty table is returned
 #' if all.reads is TRUE the table will have column $supporting indicating whether read suupports given contig
-read_support = function(li = data.table(),
+read_support = function(le.dt = data.table(),
                         reads.dt = data.table(),
                         contigs.dt = data.table(),
                         fasta = "/dev/null",
@@ -85,7 +119,7 @@ read_support = function(li = data.table(),
                         verbose = FALSE,
                         ...) {
 
-    li = dt2gr(li)
+    li = dt2gr(le.dt)
 
     if (!length(li)) {
         stop("valid loose end not provided")
