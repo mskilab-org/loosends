@@ -7,10 +7,9 @@
 call_loose_end(
   li,
   ri,
-  ref_dir = NULL,
   ref_obj = NULL,
   pad = 1000,
-  mix.tn = FALSE,
+  mix.tn = TRUE,
   max.reads = 2500,
   verbose = FALSE
 )
@@ -19,8 +18,6 @@ call_loose_end(
 \item{li}{(data.table) data.table coercible to GRanges, must have metatdata $leix and $sample}
 
 \item{ri}{(data.table) loose reads table prepped (e.g. from prep_loose_reads)}
-
-\item{ref_dir}{(character) path to directory with fasta/bwa indices}
 
 \item{ref_obj}{(character) or a list of BWA indices, if ref_dir not provided}
 

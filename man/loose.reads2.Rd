@@ -10,10 +10,7 @@ loose.reads2(
   nbam = NA,
   naln = NA,
   id = "",
-  ref = system.file("extdata", "hg19_looseends", "human_g1k_v37_decoy.fasta", package =
-    "loosends"),
-  filter = TRUE,
-  gg = NULL,
+  filter = FALSE,
   verbose = FALSE
 )
 }
@@ -22,11 +19,7 @@ loose.reads2(
 
 \item{nbam}{optional, character path to normal BAM file, default=NULL}
 
-\item{ref}{optional, BWA object of reference genome for realignment or path to fasta, default=package/extdata/hg19_looseends/human_g1k_v37_decoy.fasta}
-
-\item{filter}{optional, logical filter=TRUE returns loose read pairs only, filter=FALSE returns all read pairs annotated with logical $loose column, default=T}
-
-\item{gg}{optional, gGraph corresponding to sample, used to identify sequences fitted in graph, default=NULL}
+\item{filter}{(logical) return loose read pairs only? default FALSE}
 
 \item{verbose}{optional, default=FALSE}
 }

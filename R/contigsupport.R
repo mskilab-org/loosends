@@ -183,6 +183,7 @@ read_support = function(le.dt = data.table(),
                         min.bases = min.bases,
                         min.aligned.frac = min.aligned.frac,
                         isize.diff = isize.diff,
+                        verbose = verbose,
                         ...)
 
     window.reads.dt[, supporting := qname %in% rc$qname]
