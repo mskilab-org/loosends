@@ -6,6 +6,8 @@ ref.dir = "~/git/loosends/inst/extdata/hg19_loosends"
 loosereads.fn = system.file("tests", "testthat", "data", "loosereads_1", "loosereads.res.rds", package = "loosends")
 reads.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "reads.dt.rds", package = "loosends")
 le.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "le.dt.rds", package = "loosends")
+big.reads.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "big.reads.dt.rds", package = "loosends")
+big.le.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "big.le.dt.rds", package = "loosends")
 
 ## useful params
 this.pair = "G32831.HCC1954"
@@ -15,6 +17,10 @@ this.le = parse.gr("20:60158837-")
 loosereads.dt = readRDS(loosereads.fn)
 le.dt = readRDS(le.dt.fn)
 reads.dt = readRDS(reads.dt.fn)
+
+## read input files for pipeline
+big.le.dt = readRDS(big.le.dt.fn)
+big.reads.dt = readRDS(big.reads.dt.fn)
 
 ## load ref bwa
 ref.obj = grab_ref_obj(ref.dir = ref.dir)
@@ -67,6 +73,26 @@ test_that(desc = "check that caller produces the expected call", code = {
             expect_true(!is.null(call.res$call))
             expect_true(!is.null(call.res$filtered.contigs))
             expect_true(call.res$call$category == "type 1 loose end")
+            expect_true(call.res$filtered.contigs[, .N] > 0)
+        }
+    )
+})
+
+test_that(desc = "test wrapper for caller", code = {
+    suppressWarnings(
+        expr = {
+            call.res = call_loose_end_wrapper(id = this.pair,
+                                              le.dt = big.le.dt,
+                                              reads.dt = big.reads.dt,
+                                              ref_obj = ref.obj,
+                                              pad = 1000,
+                                              mix.tn = TRUE,
+                                              max.reads = 5000,
+                                              verbose = FALSE)
+            expect_true(!is.null(call.res$call))
+            expect_true(call.res$call[, .N] == 2)
+            expect_true(!is.null(call.res$filtered.contigs))
+            expect_true("type 1 loose end" %in% call.res$call$category)
             expect_true(call.res$filtered.contigs[, .N] > 0)
         }
     )
