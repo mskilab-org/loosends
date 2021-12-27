@@ -2,7 +2,7 @@
 #' @title read_support_wrapper
 #'
 #' @param le.dt (full output from prep_loose_ends)
-#' @param reads.dt (full output from prep_loose_reads)
+#' @param reads.dt (full output from loose_reads_wrapper)
 #' @param contigs.dt ($filtered.contigs from call_loose_end)
 #' @param id (character) sample id
 #' @param ref.bwa (human output from grab_ref_obj)
@@ -53,8 +53,10 @@ read_support_wrapper = function(le.dt = data.table(),
                           res = lapply(unique.qname, function(qn) {
                               ## grab correct contigs
                               this.contigs = contigs.dt[qname == qn]
+                              ri = prep_loose_reads(li = this.le,
+                                                    loose.reads.dt = reads.dt)
                               rc = read_support(le.dt = this.le,
-                                                reads.dt = reads.dt,
+                                                reads.dt = ri,
                                                 contigs.dt = this.contigs,
                                                 ref.bwa = ref.bwa,
                                                 verbose = verbose)

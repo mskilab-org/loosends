@@ -3,6 +3,63 @@
 #' @import gUtils
 #' @import bamUtils
 
+#' @name loosereads_wrapper
+#' @title loosereads_wrapper
+#'
+#' @description
+#'
+#' wrapper for obtaining reads + mates around loose ends and realigning
+#'
+#' @param ranges (GRanges) loose end GRanges
+#' @param tbam (character) path to normal bam
+#' @param nbam (character) optional, path to normal bam
+#' @param ref (character) path to reference .fasta
+#' @param id (character) sample name
+#' @param outdir (character)
+#' @param pad (numeric)
+#' @param verbose (logical)
+#'
+#' @return data.table of reads + mates
+loosereads_wrapper = function(ranges = GRanges(),
+                              tbam = "/dev/null",
+                              nbam = "/dev/null",
+                              ref = "/dev/null",
+                              id = "",
+                              outdir = "./",
+                              pad = 5000,
+                              verbose = FALSE) {
+
+    tparams = grab_looseread_params(gr = ranges, bam = tbam, pad = pad, verbose = verbose)
+    tsub = grab_loosereads(bam = tbam,
+                           ranges = tparams$ranges,
+                           qnames = tparams$qnames,
+                           outdir = paste0(outdir, "/tumor"),
+                           verbose = verbose)
+    taln = realign_loosereads(bam = tsub, ref = ref,
+                              outdir = paste0(outdir, "/tumor"),
+                              verbose = verbose)
+    
+    if (check_file(nbam)) {
+        nparams = grab_looseread_params(gr = ranges, bam = nbam, pad = pad, verbose = verbose)
+        nsub = grab_loosereads(bam = nbam,
+                               ranges = nparams$ranges,
+                               qnames = nparams$qnames,
+                               outdir = paste0(outdir, "/normal"),
+                               verbose = verbose)
+        naln = realign_loosereads(bam = nsub, ref = ref,
+                                  outdir = paste0(outdir, "/normal"),
+                                  verbose = verbose)
+    } else {
+        nsub = "/dev/null"
+        naln = "/dev/null"
+    }
+
+    res = loose.reads2(tbam = tsub, taln = taln, nbam = nsub, naln = naln, id = id, 
+                       filter = FALSE, verbose = verbose)
+    return(res)
+        
+}
+
 #' @name check_file
 #' @title check_file
 #'
@@ -175,7 +232,7 @@ grab_loosereads = function(bam = NA_character_, ranges = GRanges(), qnames = cha
                            outdir = "./", overwrite = TRUE, verbose = TRUE) {
 
     if (!dir.exists(outdir)) {
-        dir.create(outdir)
+        dir.create(outdir, recursive = TRUE)
     }
 
     ## write windows and qnames
@@ -270,7 +327,7 @@ grab_loosereads = function(bam = NA_character_, ranges = GRanges(), qnames = cha
 realign_loosereads = function(bam, ref = system.file('extdata', 'hg19_looseends', 'human_g1k_v37_decoy.fasta', package='loosends'), outdir = "./", verbose = FALSE) {
 
     if (!dir.exists(outdir)) {
-        dir.create(outdir)
+        dir.create(outdir, recursive = TRUE)
     }
 
     ## create FASTQ
@@ -344,8 +401,11 @@ realign_loosereads = function(bam, ref = system.file('extdata', 'hg19_looseends'
 #' The supplied BAM files are expected to have tag SA (indicated split alignments)
 #' The functionality is identical to loose.reads; however, the BAMs are expected to be prefiltered to contain only the relevant QNAMEs via samtools to avoid slow filtering in R for reads with many mate windows
 #'
-#' @param tbam character path to tumor BAM file
-#' @param nbam optional, character path to normal BAM file, default=NULL
+#' @param tbam (character) path to tumor BAM file
+#' @param taln (character) path realigned tumor bam
+#' @param nbam (character) optional, path to normal BAM file, default=NULL
+#' @param naln (character) optional, realigned normal bam
+#' @param id (character)
 #' @param filter (logical) return loose read pairs only? default FALSE
 #' @param verbose optional, default=FALSE
 #'
@@ -411,6 +471,7 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
 
     ## for each aligned read, get the index of the original read and store as query.id
     qid = match(paste(aln.reads$qname, aln.reads$reading.frame), paste(reads.dt$qname, reads.dt$seq))
+    ## paste(reads.dt$qname, reads.dt$R1, sep = "_"))
     aln.reads = aln.reads[, query.id := qid][!is.na(query.id)]
     aln.reads[(!is.na(query.id)), ":="(R1 = reads.dt$R1[query.id],
                                        R2 = reads.dt$R2[query.id],
