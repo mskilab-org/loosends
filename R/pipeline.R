@@ -54,7 +54,7 @@ process_loose_ends = function(id = "",
                                    verbose = verbose)
 
 
-    return(list(calls = calls$calls,
+    return(list(calls = calls$call,
                 contigs = calls$filtered.contigs,
                 support = support))
 }

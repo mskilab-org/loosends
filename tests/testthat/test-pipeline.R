@@ -19,11 +19,11 @@ test_that(desc = "process loose ends", code = {
                                  read_pad = 5000,
                                  assembly_pad = 1000,
                                  verbose = FALSE)
-        expect_true(!is.null(res$call))
+        expect_true(!is.null(res$calls))
         expect_true(!is.null(res$contigs))
         expect_true(!is.null(res$support))
-        expect_true(res$call[, .N] == 2)
+        expect_true(res$calls[, .N] == 2)
         expect_true(res$contigs[, .N] > 0)
-        expect_true(res$support[, .N] == res$contigs[, .N])
+        expect_true(res$support[, .N] == length(unique(res$contigs[, qname])))
     })
 })
