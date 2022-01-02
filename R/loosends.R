@@ -1053,176 +1053,176 @@ transform = function(seq, s, e){
 ##     return(reads)
 ## }
 
-## #' @name .sample.spec2
-## #' @title .sample.spec2
-## #'
-## #' @description
-## #' loads reads and mates for a single sample (tumor or normal)
-## #' assumes that BAM has already been filtered and avoids slow lapply
-## #' 
-## #' @param bam path to BAM file
-## #' @param chrsub (logical) substitute chr header? default TRUE
-## #' @param verbose optional, default=FALSE
-## .sample.spec2 = function(bam,
-##                          chrsub = TRUE,
-##                          verbose = FALSE) {
-##     if (verbose) {
-##         message(paste("loading reads from", bam))
-##     }
+#' @name .sample.spec2
+#' @title .sample.spec2
+#'
+#' @description
+#' loads reads and mates for a single sample (tumor or normal)
+#' assumes that BAM has already been filtered and avoids slow lapply
+#' 
+#' @param bam path to BAM file
+#' @param chrsub (logical) substitute chr header? default TRUE
+#' @param verbose optional, default=FALSE
+.sample.spec2 = function(bam,
+                         chrsub = TRUE,
+                         verbose = FALSE) {
+    if (verbose) {
+        message(paste("loading reads from", bam))
+    }
 
-##     ## load all sequences from BAM
-##     ## this assumes that this BAM has been pre-filtered to only include reads in relevant windows
-##     ## and their mates
-##     all.reads.grl = bamUtils::read.bam(bam, all = TRUE,
-##                                        pairs.grl = TRUE, ## return GRangesList with read pairs
-##                                        isDuplicate=NA, ## load all reads, regardless of if duplicated
-##                                        isPaired=TRUE,
-##                                        tag="SA") ## indicate split alignments
-##     reads = as.data.table(unlist(all.reads.grl))
-##     ## splits = reads[!is.na(SA)]
-##     ## if(nrow(splits) > 0){
-##     ##     splits$SA = as.character(splits$SA)
-##     ##     ## grab the windows into which the reads are split
-##     ##     splwin = dunlist(strsplit(splits$SA, ";"))
-##     ##     spl = unlist(lapply(strsplit(splwin$V1, ","), function(w) paste(w[1], w[2], sep=":")))
-##     ##     spl = GRanges(spl)
-##     ##     ## get the other side of the read with matching qname from the BAM file
-##     ##     spl$qname = splits[as.integer(splwin$listid)]$qname
-##     ##     splitsides = as.data.table(unlist(read.bam(bam, gUtils::gr.reduce(spl+150)-150, pairs.grl=T, isDuplicate=NA, tag="SA")) %Q% (qname %in% spl$qname))[order(mrnm, mpos)][!duplicated(paste(seqnames, start, qname, seq))]
-##     ##     reads = rbind(reads, splitsides, fill=T, use.names=TRUE)
-##     ## }
-##     reads[, unpmate := bamflag(flag)[, "hasUnmappedMate"]==1]
-##     reads[, isunp := start == 1 & is.na(seq)]
-##     reads[, unp := any(unpmate) & any(isunp), by=qname]
-##     ## for reads with that are unmapped
-##     ## set the start and end to start/end of its mate
-##     reads[(unp), ":="(start = ifelse(isunp, start[unpmate], start),
-##                       end = ifelse(isunp, end[unpmate], end)),
-##           by=qname]
-##     ## a missing read is an qname in which one of the sequences is NA
-##     reads[, missing := any(is.na(seq)), by=qname]
-##     reads = reads[!is.na(seq)]
-##     ## choose non-duplicated reads and designate one R1 and the other R2
-##     rpair = reads[!duplicated(paste(qname, flag)),];
-##     rpair$MQ = NULL
-##     rpair[, R1 := bamflag(flag)[, "isFirstMateRead"]==1]
-##     rpair[, R2 := bamflag(flag)[, "isSecondMateRead"]==1]
-##     rpair[, paired := any(R1) & any(R2), by=qname]
-##     reads = reads[, !c("unpmate", "isunp", "unp", "SA")]
-##     if(verbose) {
-##         message(ifelse(all(rpair$paired),
-##                        "Found All Mates!!",
-##                        "Some mates still missing - perhaps BAM was deduplicated"))
-##     }
-##     rpair[, MQ := rev(mapq), by=qname]
-##     rpair[, count := .N, by = qname]
-##     rpair[count == 0, MQ := 0]
-##     flip = bamflag(rpair$flag)[, "isMinusStrand"] == 1 | rpair$strand == "-"
-##     rpair[flip, seq := as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq)))]
-##     rpair = rpair[rev(order(nchar(seq)))][!duplicated(paste(qname, R1))]
-##     reads = dt2gr(rpair)
+    ## load all sequences from BAM
+    ## this assumes that this BAM has been pre-filtered to only include reads in relevant windows
+    ## and their mates
+    all.reads.grl = bamUtils::read.bam(bam, all = TRUE,
+                                       pairs.grl = TRUE, ## return GRangesList with read pairs
+                                       isDuplicate=NA, ## load all reads, regardless of if duplicated
+                                       isPaired=TRUE,
+                                       tag="SA") ## indicate split alignments
+    reads = as.data.table(unlist(all.reads.grl))
+    ## splits = reads[!is.na(SA)]
+    ## if(nrow(splits) > 0){
+    ##     splits$SA = as.character(splits$SA)
+    ##     ## grab the windows into which the reads are split
+    ##     splwin = dunlist(strsplit(splits$SA, ";"))
+    ##     spl = unlist(lapply(strsplit(splwin$V1, ","), function(w) paste(w[1], w[2], sep=":")))
+    ##     spl = GRanges(spl)
+    ##     ## get the other side of the read with matching qname from the BAM file
+    ##     spl$qname = splits[as.integer(splwin$listid)]$qname
+    ##     splitsides = as.data.table(unlist(read.bam(bam, gUtils::gr.reduce(spl+150)-150, pairs.grl=T, isDuplicate=NA, tag="SA")) %Q% (qname %in% spl$qname))[order(mrnm, mpos)][!duplicated(paste(seqnames, start, qname, seq))]
+    ##     reads = rbind(reads, splitsides, fill=T, use.names=TRUE)
+    ## }
+    reads[, unpmate := bamflag(flag)[, "hasUnmappedMate"]==1]
+    reads[, isunp := start == 1 & is.na(seq)]
+    reads[, unp := any(unpmate) & any(isunp), by=qname]
+    ## for reads with that are unmapped
+    ## set the start and end to start/end of its mate
+    reads[(unp), ":="(start = ifelse(isunp, start[unpmate], start),
+                      end = ifelse(isunp, end[unpmate], end)),
+          by=qname]
+    ## a missing read is an qname in which one of the sequences is NA
+    reads[, missing := any(is.na(seq)), by=qname]
+    reads = reads[!is.na(seq)]
+    ## choose non-duplicated reads and designate one R1 and the other R2
+    rpair = reads[!duplicated(paste(qname, flag)),];
+    rpair$MQ = NULL
+    rpair[, R1 := bamflag(flag)[, "isFirstMateRead"]==1]
+    rpair[, R2 := bamflag(flag)[, "isSecondMateRead"]==1]
+    rpair[, paired := any(R1) & any(R2), by=qname]
+    reads = reads[, !c("unpmate", "isunp", "unp", "SA")]
+    if(verbose) {
+        message(ifelse(all(rpair$paired),
+                       "Found All Mates!!",
+                       "Some mates still missing - perhaps BAM was deduplicated"))
+    }
+    rpair[, MQ := rev(mapq), by=qname]
+    rpair[, count := .N, by = qname]
+    rpair[count == 0, MQ := 0]
+    flip = bamflag(rpair$flag)[, "isMinusStrand"] == 1 | rpair$strand == "-"
+    rpair[flip, seq := as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq)))]
+    rpair = rpair[rev(order(nchar(seq)))][!duplicated(paste(qname, R1))]
+    reads = dt2gr(rpair)
 
-##     if (chrsub) {
-##         return(gr.nochr(reads))
-##     }
-##     gc()
-##     return(reads)
-## }
-## #' .realign
-## #'
-## #' @description
-## #' realigns reads and their mates single-end to attach individual MAPQs
-## #' 
-## #' @param reads (GRanges or data.table) reads from BAM file with $seq in original reading frame
-## #' @param ref (BWA object from RSeqLib) reference genome for realignment
-## #' @param gg (gGraph) sample used to identify sequences fitted in graph, default=NULL
-## #' @param filter (logical) return loose reads pairs only? default TRUE
-## #' @param chunksize (numeric) perform realignment in chunks to help with memory. default 1e6
-## #' @param verbose optional, default=FALSE
-## .realign = function(reads, ref, gg=NULL, filter=TRUE, verbose=F, chunksize = 5e5){
-##     if(!is.null(gg)){
-##         seqs = unique(seqnames(gg$nodes[!is.na(cn)]$gr))
-##     } else {
-##         seqs = c(1:22, "X", "Y")
-##         if(any(grepl("chr", seqlevels(ref)))) seqs = gr.chr(seqs)
-##     }
+    if (chrsub) {
+        return(gr.nochr(reads))
+    }
+    gc()
+    return(reads)
+}
+#' .realign
+#'
+#' @description
+#' realigns reads and their mates single-end to attach individual MAPQs
+#' 
+#' @param reads (GRanges or data.table) reads from BAM file with $seq in original reading frame
+#' @param ref (BWA object from RSeqLib) reference genome for realignment
+#' @param gg (gGraph) sample used to identify sequences fitted in graph, default=NULL
+#' @param filter (logical) return loose reads pairs only? default TRUE
+#' @param chunksize (numeric) perform realignment in chunks to help with memory. default 1e6
+#' @param verbose optional, default=FALSE
+.realign = function(reads, ref, gg=NULL, filter=TRUE, verbose=F, chunksize = 5e5){
+    if(!is.null(gg)){
+        seqs = unique(seqnames(gg$nodes[!is.na(cn)]$gr))
+    } else {
+        seqs = c(1:22, "X", "Y")
+        if(any(grepl("chr", seqlevels(ref)))) seqs = gr.chr(seqs)
+    }
 
-##     ## realign ALL reads if not filtering for loose pairs
-##     ## otherwise, realign just the low MAPQ read in the pair
-##     if(filter){
-##         qni = as.data.table(reads)[is.na(mapq) | mapq<50 | is.na(MQ), (unique(qname))]
-##     } else{
-##         qni = unique(reads$qname)
-##     }
+    ## realign ALL reads if not filtering for loose pairs
+    ## otherwise, realign just the low MAPQ read in the pair
+    if(filter){
+        qni = as.data.table(reads)[is.na(mapq) | mapq<50 | is.na(MQ), (unique(qname))]
+    } else{
+        qni = unique(reads$qname)
+    }
 
-##     ## start realignment (in chunks)
-##     redo = reads$qname %in% qni
-##     if(verbose) {
-##         message(paste("realigning", sum(redo), "reads"))
-##     }
+    ## start realignment (in chunks)
+    redo = reads$qname %in% qni
+    if(verbose) {
+        message(paste("realigning", sum(redo), "reads"))
+    }
     
-##     ## do realignment in chunks to help with memory
-##     seqs.for.realignment = setNames(reads$seq, 1:length(reads))
-##     ix.for.realignment = which(redo)
-##     nchunks = ceiling(sum(redo) / chunksize)
-##     realn = data.table()
-##     for (chunk in 1:nchunks) {
-##         starti = (chunk - 1) * chunksize + 1
-##         endi = pmin(sum(redo), (chunk * chunksize))
-##         if (verbose) {
-##             message("Chunk start: ", starti)
-##             message("Chunk end: ", endi)
-##             message("Chunk ", chunk, " of ", nchunks)
-##         }
-##         realni = ref[seqs.for.realignment[ix.for.realignment[starti:endi]]]
-##         gc()
-##         realn = rbind(realn, as.data.table(realni), use.names = TRUE, fill = TRUE)
-##         ## remove unneeded variables to help with memory footprint
-##         rm(realni)
-##         gc()
-##     }
+    ## do realignment in chunks to help with memory
+    seqs.for.realignment = setNames(reads$seq, 1:length(reads))
+    ix.for.realignment = which(redo)
+    nchunks = ceiling(sum(redo) / chunksize)
+    realn = data.table()
+    for (chunk in 1:nchunks) {
+        starti = (chunk - 1) * chunksize + 1
+        endi = pmin(sum(redo), (chunk * chunksize))
+        if (verbose) {
+            message("Chunk start: ", starti)
+            message("Chunk end: ", endi)
+            message("Chunk ", chunk, " of ", nchunks)
+        }
+        realni = ref[seqs.for.realignment[ix.for.realignment[starti:endi]]]
+        gc()
+        realn = rbind(realn, as.data.table(realni), use.names = TRUE, fill = TRUE)
+        ## remove unneeded variables to help with memory footprint
+        rm(realni)
+        gc()
+    }
     
-##     ## recast as GRanges since legacy code expects that
-##     realn = dt2gr(realn)
-##     ## realn = ref[setNames(reads$seq, 1:length(reads))[redo]]
-##     realn$mapq = as.integer(realn$mapq)
-##     realn$query.id = as.integer(realn$qname); realn$qname = reads[realn$query.id]$qname
-##     values(realn) = cbind(values(realn), values(reads[realn$query.id, !(colnames(values(reads)) %in% colnames(values(realn)))]))
+    ## recast as GRanges since legacy code expects that
+    realn = dt2gr(realn)
+    ## realn = ref[setNames(reads$seq, 1:length(reads))[redo]]
+    realn$mapq = as.integer(realn$mapq)
+    realn$query.id = as.integer(realn$qname); realn$qname = reads[realn$query.id]$qname
+    values(realn) = cbind(values(realn), values(reads[realn$query.id, !(colnames(values(reads)) %in% colnames(values(realn)))]))
 
-##     ## keep track of the unaligned reads that didn't appear in the GRanges from BWA
-##     uix = ! ( (1:length(reads))[redo] %in% realn$query.id )
-##     uix = (1:length(reads))[redo][uix]
-##     unaln = as.data.table(reads[uix])
-##     unaln[, ":="(
-##         seqnames = "*",
-##         start = 1,
-##         end = 0,
-##         flag = ifelse(R1, 69, 113),
-##         mapq = 0,
-##         query.id = uix)]
+    ## keep track of the unaligned reads that didn't appear in the GRanges from BWA
+    uix = ! ( (1:length(reads))[redo] %in% realn$query.id )
+    uix = (1:length(reads))[redo][uix]
+    unaln = as.data.table(reads[uix])
+    unaln[, ":="(
+        seqnames = "*",
+        start = 1,
+        end = 0,
+        flag = ifelse(R1, 69, 113),
+        mapq = 0,
+        query.id = uix)]
 
-##     ## final reads are the realigned reads in new genomic coordanates + unaligned reads
-##     ## in addition, the original sequence + realignment mapqs are stored
-##     realn = rbind(as.data.table(realn), unaln, fill=T, use.names=TRUE)
-##     realn$reading.frame = reads[realn$query.id]$seq
-##     realn$mapq = as.integer(realn$mapq)
-##     realn[, mapq := ifelse(!(seqnames %in% seqs), as.integer(0), mapq), by=query.id]
-##     realn = realn[rev(order(mapq))][!duplicated(query.id), ]
-##     gc()
-##     realn[, MQ := ifelse(rep(.N, .N)==1, as.integer(NA), c(mapq[-1], mapq[1])), by=qname]
-##     cols = c(colnames(realn)[colnames(realn) %in% colnames(as.data.table(reads))], "reading.frame", "AS")
-##     realn = realn[, cols, with=F]
+    ## final reads are the realigned reads in new genomic coordanates + unaligned reads
+    ## in addition, the original sequence + realignment mapqs are stored
+    realn = rbind(as.data.table(realn), unaln, fill=T, use.names=TRUE)
+    realn$reading.frame = reads[realn$query.id]$seq
+    realn$mapq = as.integer(realn$mapq)
+    realn[, mapq := ifelse(!(seqnames %in% seqs), as.integer(0), mapq), by=query.id]
+    realn = realn[rev(order(mapq))][!duplicated(query.id), ]
+    gc()
+    realn[, MQ := ifelse(rep(.N, .N)==1, as.integer(NA), c(mapq[-1], mapq[1])), by=qname]
+    cols = c(colnames(realn)[colnames(realn) %in% colnames(as.data.table(reads))], "reading.frame", "AS")
+    realn = realn[, cols, with=F]
 
-##     ## annotate whether the read belongs to a loose read pair
-##     lqn = realn[mapq>50 & (is.na(MQ) | MQ < 1), qname]
-##     if(filter){
-##         realn = realn[qname %in% lqn,]
-##         realn[, loose.pair := TRUE]
-##     } else realn[, loose.pair := qname %in% lqn]
-##     realn[, high.mate := mapq>50 & (is.na(MQ) | MQ < 1)]
-##     gc()
-##     return(realn)
-## }
+    ## annotate whether the read belongs to a loose read pair
+    lqn = realn[mapq>50 & (is.na(MQ) | MQ < 1), qname]
+    if(filter){
+        realn = realn[qname %in% lqn,]
+        realn[, loose.pair := TRUE]
+    } else realn[, loose.pair := qname %in% lqn]
+    realn[, high.mate := mapq>50 & (is.na(MQ) | MQ < 1)]
+    gc()
+    return(realn)
+}
 
 
 ## #' loose.reads
