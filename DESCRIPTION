@@ -8,6 +8,11 @@ Authors@R:
 Description: What the package does (one paragraph).
 Remotes: 
   github::mskilab/gUtils,
+  github::mskilab/gGnome,
+  github::mskilab/gChain,
+  github::mskilab/gTrack,
+  github::mskilab/bamUtils,
+  github::mskilab/RSeqLib,
   bioc::3.10/GenomicRanges,
 Depends:
     R (>= 3.5.1),
