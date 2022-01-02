@@ -48,6 +48,7 @@ call_loose_end_wrapper = function(id = "",
                           }
                           ri = prep_loose_reads(li = le.dt[ix,],
                                                 loose.reads.dt = this.reads.dt)
+
                           sub.res = call_loose_end(li = le.dt[ix,],
                                                    ri = ri,
                                                    ref_obj = ref_obj,
@@ -376,7 +377,7 @@ find.telomeres = function(query, out.dt){
 #' @param ref_obj optional, list of BWA objects built from ref_dir fastas, names must match expected "human" "rep" "polyA" "microbe" (only "human" is used), default=NULL
 #' @param return.contigs (logical)
 #' @export
-caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends'), ref_obj=NULL, return.contigs = TRUE) {
+caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends'), ref_obj=NULL, return.contigs = FALSE) {
     reference = FALSE
     complex = FALSE
     missedj = FALSE
@@ -960,7 +961,6 @@ read.based = function(li, ri, pad=NULL, ref_dir=system.file('extdata', 'hg19_loo
     res = caller(li, out.dt[is.dup(qname)], ref_dir=ref_dir, ref_obj=ref_obj,
                 return.contigs = return.contigs)
     return(res)
-    ## return(dt[, c("complex", "missedj", "junction"), with = TRUE])
 }
 
 #' transform
@@ -1128,7 +1128,6 @@ transform = function(seq, s, e){
 ##     gc()
 ##     return(reads)
 ## }
-
 ## #' .realign
 ## #'
 ## #' @description
@@ -1327,9 +1326,6 @@ prep_loose_reads = function(li, loose.reads.dt) {
     ri$leix = li$leix
 
     ## denote sample vs. control
-    ## importantly, this assumes the loose end input is in opposite orientation
-    ## ri[, track := paste(ifelse(sample == li$sample, "sample", "control"),
-    ##                     ifelse(strand == "+", "rev", "for"), sep=".")]
     ri[, track := paste(ifelse(sample == li$sample, "sample", "control"),
                         ifelse(strand == "+", "for", "rev"), sep=".")]
     ri[, concord := !(loose.pair) & .N == 2 & length(unique(seqnames)) == 1 & strand[R1] != strand[R2] & strand[start == min(start)]=="+" & min(start) + 3e3 > max(start), by=qname]
