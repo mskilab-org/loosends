@@ -1,5 +1,6 @@
 library(loosends)
 library(testthat)
+library(gUtils)
 
 ## generally useful files
 ref = "~/DB/hg19/human_g1k_v37_decoy.fasta"
