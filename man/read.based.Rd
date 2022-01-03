@@ -9,7 +9,8 @@ read.based(
   ri,
   pad = NULL,
   ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"),
-  ref_obj = NULL
+  ref_obj = NULL,
+  return.contigs = FALSE
 )
 }
 \arguments{

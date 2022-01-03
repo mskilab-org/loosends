@@ -16,7 +16,7 @@ read_support_wrapper(
 \arguments{
 \item{le.dt}{(full output from prep_loose_ends)}
 
-\item{reads.dt}{(full output from prep_loose_reads)}
+\item{reads.dt}{(full output from loose_reads_wrapper)}
 
 \item{contigs.dt}{($filtered.contigs from call_loose_end)}
 

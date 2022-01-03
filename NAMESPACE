@@ -2,12 +2,9 @@
 
 export(caller)
 export(contig.support)
-export(ggraph.loose.ends)
 export(loose.reads2)
 export(munch)
 export(prep_loose_reads)
-export(process.loose.ends)
-export(process.single.end)
 import(Rsamtools)
 import(bamUtils)
 import(gUtils)

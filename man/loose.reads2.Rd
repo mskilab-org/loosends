@@ -15,9 +15,15 @@ loose.reads2(
 )
 }
 \arguments{
-\item{tbam}{character path to tumor BAM file}
+\item{tbam}{(character) path to tumor BAM file}
 
-\item{nbam}{optional, character path to normal BAM file, default=NULL}
+\item{taln}{(character) path realigned tumor bam}
+
+\item{nbam}{(character) optional, path to normal BAM file, default=NULL}
+
+\item{naln}{(character) optional, realigned normal bam}
+
+\item{id}{(character)}
 
 \item{filter}{(logical) return loose read pairs only? default FALSE}
 
