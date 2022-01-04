@@ -14,8 +14,11 @@ Remotes:
   github::mskilab/bamUtils,
   github::mskilab/RSeqLib,
   bioc::3.10/GenomicRanges,
+  bioc::3.10/rtracklayer,
+  bioc::3.10/Rsamtools,
 Depends:
-    R (>= 3.5.1),
+    R (>= 3.5.1)
+Imports:
     data.table (>= 1.11),
     gGnome,
     igraph,
@@ -28,6 +31,8 @@ Depends:
     RSeqLib,
     bamUtils,
     gChain,
+    rtracklayer,
+    Rsamtools,
     BSgenome.Hsapiens.UCSC.hg19
 License: GPL-3
 Encoding: UTF-8

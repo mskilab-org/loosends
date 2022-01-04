@@ -1,5 +1,6 @@
 library(testthat)
 library(loosends)
+library(gUtils)
 
 ## reference directory
 ref.dir = "~/git/loosends/inst/extdata/hg19_loosends"

@@ -1,3 +1,4 @@
+library(gUtils)
 library(loosends)
 library(testthat)
 
