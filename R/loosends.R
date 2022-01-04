@@ -1314,6 +1314,10 @@ prep_loose_reads = function(li, loose.reads.dt) {
         stop("li must contain column $leix")
     }
 
+    if (!nrow(loose.reads.dt)) {
+        return(loose.reads.dt)
+    }
+
     if (is.null(loose.reads.dt$sample)) {
         stop("loose.reads.dt must contain column $sample")
     }

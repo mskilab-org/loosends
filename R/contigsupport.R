@@ -5,6 +5,7 @@
 #' @param reads.dt (full output from loose_reads_wrapper)
 #' @param contigs.dt ($filtered.contigs from call_loose_end)
 #' @param id (character) sample id
+#' @param pad (numeric) window for getting supporting reads
 #' @param ref.bwa (human output from grab_ref_obj)
 #' @param verbose (logical)
 #'
@@ -20,6 +21,7 @@ read_support_wrapper = function(le.dt = data.table(),
                                 reads.dt = data.table(),
                                 contigs.dt = data.table(),
                                 id = "",
+                                pad = 5e3,
                                 ref.bwa = NULL,
                                 verbose = FALSE) {
 
@@ -53,13 +55,22 @@ read_support_wrapper = function(le.dt = data.table(),
                           res = lapply(unique.qname, function(qn) {
                               ## grab correct contigs
                               this.contigs = contigs.dt[qname == qn]
+                              ## grab correct reads
+                              sel = dt2gr(reads.dt) %^% (dt2gr(this.le) + pad)
+                              if (any(sel)) {
+                                  qns = reads.dt[sel, qname]
+                                  this.reads.dt = reads.dt[qname %in% qns,]
+                              } else {
+                                  this.reads.dt = reads.dt
+                              }
                               ri = prep_loose_reads(li = this.le,
-                                                    loose.reads.dt = reads.dt)
+                                                    loose.reads.dt = this.reads.dt)
                               rc = read_support(le.dt = this.le,
                                                 reads.dt = ri,
                                                 contigs.dt = this.contigs,
                                                 ref.bwa = ref.bwa,
                                                 verbose = verbose)
+                              gc() ## release memory?
                               if (rc[, .N]) {
                                   out = data.table(leix = lx,
                                                    loose.end = this.le[, paste0(seqnames, ":", start, strand)],
@@ -76,6 +87,10 @@ read_support_wrapper = function(le.dt = data.table(),
                                                    normal.count = 0,
                                                    total.count = 0,
                                                    tumor.frac = 0)
+                              }
+                              if (verbose) {
+                                  message("Total tumor count: ", out[, sum(tumor.count)])
+                                  message("Total normal count: ", out[, sum(normal.count)])
                               }
                               return(out)                    
                           })
@@ -287,7 +302,8 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
             stop("invalid data type provided for ref: ", class(ref)[1])
         }
 
-        tmp = bwa.ref[reads$seq] %>% gr2dt
+        ## tmp = bwa.ref[reads$seq] %>% gr2dt
+        tmp = bwa.ref[reads$reading.frame] %>% gr2dt
         tmp$ix = as.numeric(as.character(tmp$qname))
         tmp$R1 = reads$R1[tmp$ix]
         tmp$qname = reads$qname[tmp$ix]
@@ -326,7 +342,7 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
     reads$ref.aligned.frac = rdt$ref.aligned.frac
 
     ## readsc is a data.table that denotes read locations in contig coordinates
-    readsc = bwa.contig[reads$seq] %>% gr2dt
+    readsc = bwa.contig[reads$reading.frame] %>% gr2dt
 
     ## important! if no reads align to the contig then the following will fail!
     if (!nrow(readsc)) {
