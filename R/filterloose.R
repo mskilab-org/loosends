@@ -3,28 +3,19 @@
 #'
 #' @param jabba_rds (character) path to JaBbA
 #' @param coverage (character) path to coverage file with gc-adjusted counts
-#' @param background (character) path to dryclean with background
-#' @param bg.field (character) background coverage field (background)
 #' @param norm.field (character) normal count field (reads.corrected)
 #' @param mask (character) path to coverage mask
-#' @param bp.mask (character) path to coverage mask
 #' @param mask_pad (numeric) pad on distance to mask (in practice just for annotation purposes)
 #' @param norm_thresh (numeric) 0.6 (from filter.loose)
-#' @param bg_thresh (numeric) 0.9 threshold for germline CN change
 #' @param min_size (numeric) minimum size in BP
 #' @param subset (logical) subset loose ends to include only valid ones before returning
 #' @param verbose (logical)
-grab_loose = function(jabba_rds,
+filter_loose = function(jabba_rds,
                       coverage = "/dev/null",
-                      background = "/dev/null",
-                      bg.field = "background",
                       norm.field = 'reads.corrected',
-                      ## cov.pad = 5e4,
                       mask = "~/projects/gGnome/files/zc_stash/tile.mask.rds",
-                      bp.mask = "/dev/null", ##"~/projects/gGnome/files/zc_stash/common.bps.rds",
                       mask_pad = 0,
                       norm_thresh = 0.6,
-                      bg_thresh = 0.9,
                       min_size = 0,
                       subset = FALSE,
                       verbose = TRUE) {
@@ -47,32 +38,11 @@ grab_loose = function(jabba_rds,
         use.coverage = TRUE
     }
 
-    if (!check_file(background)) {
-        if (verbose) {
-            message("Background file not supplied!")
-        }
-        use.bg = FALSE
-    } else {
-        if (verbose) {
-            message("Reading background coverage")
-        }
-        bg.gr = readRDS(background)
-        bg.gr = gr.nochr(bg.gr)
-        use.bg = TRUE
-    }
-
     if (use.coverage) {
         if (!(norm.field %in% names(values(cov.gr)))) {
             stop("supplied field not in coverage metadata: ", norm.field)
         }
         cov.gr = cov.gr %Q% (!is.infinite(values(cov.gr)[[norm.field]]))
-    }
-
-    if (use.bg) {
-        if (!(bg.field %in% names(values(bg.gr)))) {
-            stop("supplied field not in coverage metadata: ", bg.field)
-        }
-        bg.gr = bg.gr %Q% (!is.infinite(values(bg.gr)[[bg.field]]))
     }
 
     ## pull loose ends from jabba_rds
@@ -115,18 +85,6 @@ grab_loose = function(jabba_rds,
         le.dt[, mask := FALSE]
     }
 
-    if (check_file(bp.mask)) {
-
-        if (verbose) {
-            message("Checking overlaps with common breakpoints!")
-        }
-        
-        bp.mask.gr = readRDS(bp.mask)
-        le.dt[, bp.mask := le.gr %^% gr.stripstrand(bp.mask.gr)]
-    } else {
-        le.dt[, bp.mask := FALSE]
-    }
-
     ## get node ids of fused and unfused loose ends
     if (verbose) {
         message("Identifying fused and unfused sides of each loose end")
@@ -141,12 +99,6 @@ grab_loose = function(jabba_rds,
         cov.gr$abscn = skitools::rel2abs(cov.gr, field = norm.field, purity = 1, ploidy = 2)
     }
 
-    if (use.bg) {
-        if (verbose) { message("rel2abs transforming background coverage") }
-        ##mean.ploidy = (gg$meta$purity * gg$meta$ploidy) + (1 - gg$meta$purity) * 2
-        bg.gr$abscn = skitools::rel2abs(bg.gr, field = bg.field, purity = 1, ploidy = 2)
-    }
-    
     fused.unfused.dt = fused_unfused(le.dt, jabba_rds)
 
     ## get flanking normal coverage (borrowed from filter.loose)
@@ -179,17 +131,6 @@ grab_loose = function(jabba_rds,
 
     }
 
-    if (use.bg) {
-
-        ## add background segmentation here, which is hopefully not too noisy
-        bg.cov.dt = gr.findoverlaps(bg.gr, segs.gr, return.type = 'data.table')
-        if (nrow(sides.cov.dt)) {
-            bg.cov.dt[, bg.cov := values(bg.gr)[["abscn"]][query.id]]
-            bg.cov.dt[, fused := values(segs.gr)$fused[subject.id]]
-            bg.cov.dt[, loose.index := values(segs.gr)$loose.index[subject.id]]
-        }
-    }
-
     if (use.coverage) {
         ## compute mean coverage for fused and unfused sides
 
@@ -206,9 +147,7 @@ grab_loose = function(jabba_rds,
                                (length(unique(.SD$normal.fg[.SD$fused == FALSE])) < 2)]
             if (sides.cov.dt[(both.sides), .N]) {
                 ks.cov.dt = sides.cov.dt[(both.sides) & (!all.same),
-                                         .(## fused.sw = shapiro.test(log1p(.SD$normal.fg[.SD$fused == TRUE]))$p.value,
-                                           ## unfused.sw = shapiro.test(log1p(.SD$normal.fg[.SD$fused == FALSE]))$p.value,
-                                           ks = wilcox.test(.SD$normal.fg[.SD$fused == TRUE],
+                                         .(ks = wilcox.test(.SD$normal.fg[.SD$fused == TRUE],
                                                             .SD$normal.fg[.SD$fused == FALSE])$p.value,
                                            t = t.test(log1p(.SD$normal.fg[.SD$fused == TRUE]),
                                                       log1p(.SD$normal.fg[.SD$fused == FALSE]))$p.value),
@@ -218,7 +157,6 @@ grab_loose = function(jabba_rds,
             }
             
             if ("fused" %in% colnames(mean.cov.dt) & "unfused" %in% colnames(mean.cov.dt)) {
-                ## should be rel2abs transformed
                 mean.cov.dt[, norm.change := norm_thresh < abs(fused - unfused)]
             } else {
                 mean.cov.dt[, norm.change := NA]
@@ -232,15 +170,12 @@ grab_loose = function(jabba_rds,
             ## add ks test p values
             le.dt$norm.ks = ks.cov.dt$ks[match(le.dt$loose.index, ks.cov.dt$loose.index)]
             le.dt$norm.t = ks.cov.dt$t[match(le.dt$loose.index, ks.cov.dt$loose.index)]
-            ## le.dt$fused.sw = ks.cov.dt$fused.sw[match(le.dt$loose.index, ks.cov.dt$loose.index)]
-            ## le.dt$unfused.sw = ks.cov.dt$unfused.sw[match(le.dt$loose.index, ks.cov.dt$loose.index)]
 
             ## idk, NA handling?
             le.dt[is.na(norm.fused), norm.change := TRUE]
             le.dt[is.na(norm.unfused), norm.change := TRUE]
 
             ## track logp value from wilcoxon and t test
-            ## track log fold change and difference between fused and unfused
             le.dt[, logw := -log10(norm.ks)]
             le.dt[, logt := -log10(norm.t)]
             le.dt[, logfc := log2(norm.fused) - log2(norm.unfused)]
@@ -255,42 +190,6 @@ grab_loose = function(jabba_rds,
         le.dt$norm.change = FALSE
         le.dt$norm.fused = NA
         le.dt$norm.unfused = NA
-    }
-
-    if (use.bg) {
-
-        ## compute mean coverage for fused and unfused sides
-        if (sides.cov.dt[, .N]) {
-            mean.cov.dt = bg.cov.dt[, .(mean.normal.cov = mean(bg.cov, na.rm = T)),
-                                       by = .(loose.index, fused)]
-            mean.cov.dt[, fused := ifelse(fused, 'fused', 'unfused')]
-            mean.cov.dt[, fused := factor(fused, levels = c("fused", "unfused"))]
-            mean.cov.dt = dcast.data.table(mean.cov.dt, loose.index ~ fused, value.var = "mean.normal.cov")
-            
-            ## determine whether it's higher than normal beta
-            if ("fused" %in% colnames(mean.cov.dt) & "unfused" %in% colnames(mean.cov.dt)) {
-                mean.cov.dt[, bg.change := bg_thresh < abs(fused - unfused)]
-            } else {
-                mean.cov.dt[, bg.change := NA]
-            }
-
-            ## mark normal change and copy normal fused and unfused coverage
-            le.dt$bg.change = le.dt$loose.index %in% mean.cov.dt[(bg.change), loose.index]
-
-            ## if there is no normal coverage, we cannot confidently tell that there is no change in normal CN
-            le.dt$bg.fused = mean.cov.dt$fused[match(le.dt$loose.index, mean.cov.dt$loose.index)]
-            le.dt$bg.unfused = mean.cov.dt$unfused[match(le.dt$loose.index, mean.cov.dt$loose.index)]
-            le.dt[is.na(bg.fused), bg.change := TRUE]
-            le.dt[is.na(bg.unfused), bg.change := TRUE]
-        } else {
-            le.dt$bg.change = TRUE
-            le.dt$bg.fused = NA
-            le.dt$bg.unfused = NA
-        }
-    } else {
-        le.dt$bg.change = FALSE
-        le.dt$bg.fused = NA
-        le.dt$bg.unfused = NA
     }
 
     ## ## get CN of each side of loose end
@@ -309,4 +208,55 @@ grab_loose = function(jabba_rds,
     le.dt[, loose.end := paste0(seqnames, ":", start, strand)]
 
     return(le.dt)
+}
+
+#' @name gg_loose_end
+#' @title gg_loose_end
+#'
+#' @param jabba_rds (character) path to jabba output
+#' @param return.type (character) one of GRanges, data.table
+#' @param std.chrs (logical) return only loose ends on standard chromosomes
+#' 
+#' @return loose ends of a JaBbA graph as GRanges
+#' if gGraph is not balanced, will produce a warning and return empty GRanges
+gg_loose_end = function(jabba_rds = NA_character_,
+                        return.type = "GRanges",
+                        std.chrs = TRUE) {
+    
+    if (!check_file(jabba_rds)) {
+        stop("file does not exist: ", jabba_rds)
+    }
+    
+    gg = gG(jabba = jabba_rds)
+
+    if (is.null(gg$nodes$dt$loose.cn.left) | is.null(gg$nodes$dt$loose.cn.right)) {
+        stop("gg missing field loose.cn.left and loose.cn.right. please check if graph if balanced.")
+    }
+
+    ll = gr2dt(gr.start(gg$nodes[!is.na(cn) & loose.cn.left>0]$gr))[, ":="(lcn = loose.cn.left,
+                                                                           strand = "+")]
+    lr = gr2dt(gr.end(gg$nodes[!is.na(cn) & loose.cn.right>0]$gr))[, ":="(lcn = loose.cn.right,
+                                                                           strand = "-")]
+    if (nrow(ll)) {
+        ll[, ":="(lcn = loose.cn.left, strand = "+")]
+    }
+
+    if (nrow(lr)) {
+        lr[, ":="(lcn = loose.cn.right, strand = "-")]
+    }
+
+    all.loose.dt = rbind(ll, lr, fill = TRUE)
+
+    if (all.loose.dt[, .N]) {
+        stdchrs = c(as.character(1:22), "X", "Y")
+        all.loose.dt = all.loose.dt[(as.character(seqnames) %in% stdchrs) |
+                                    (as.character(seqnames) %in% paste0("chr", stdchrs)),]
+    }
+
+
+    if (return.type == "GRanges") {
+        all.loose.gr = dt2gr(all.loose.dt, seqlengths = seqlengths(gg))
+        return(all.loose.gr)
+    }
+    return(all.loose.dt)
 }

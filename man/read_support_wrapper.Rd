@@ -9,6 +9,7 @@ read_support_wrapper(
   reads.dt = data.table(),
   contigs.dt = data.table(),
   id = "",
+  pad = 5000,
   ref.bwa = NULL,
   verbose = FALSE
 )
@@ -21,6 +22,8 @@ read_support_wrapper(
 \item{contigs.dt}{($filtered.contigs from call_loose_end)}
 
 \item{id}{(character) sample id}
+
+\item{pad}{(numeric) window for getting supporting reads}
 
 \item{ref.bwa}{(human output from grab_ref_obj)}
 

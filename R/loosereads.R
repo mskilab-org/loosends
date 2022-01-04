@@ -1,4 +1,5 @@
 #' @import GenomicRanges
+#' @importFrom GenomicRanges GRanges
 #' @import data.table
 #' @import Matrix
 #' @import igraph
