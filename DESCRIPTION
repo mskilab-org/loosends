@@ -17,23 +17,22 @@ Remotes:
   bioc::3.10/rtracklayer,
   bioc::3.10/Rsamtools,
 Depends:
-    R (>= 3.5.1)
+    R (>= 3.5.1),
+    gUtils
 Imports:
     data.table (>= 1.11),
+    bamUtils,
     gGnome,
     igraph,
     Matrix,
     gTrack,
-    gUtils,     
     reshape2,
-    GenomicRanges,
     Biostrings,
     RSeqLib,
-    bamUtils,
     gChain,
+    GenomicRanges,
     rtracklayer,
-    Rsamtools,
-    BSgenome.Hsapiens.UCSC.hg19
+    Rsamtools
 License: GPL-3
 Encoding: UTF-8
 LazyData: true

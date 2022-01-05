@@ -24,7 +24,10 @@ read.based(
 
 \item{ref_obj}{optional, list of BWA objects built from ref_dir fastas, names must match expected "human" "rep" "polyA" "microbe" (only "human" is used), default=NULL}
 
-\item{return.full}{also return reads}
+\item{return.contigs}{return contigs if TRUE, otherwise just return}
+}
+\value{
+if return.contigs is TRUE, returns a list with elements $call, $filtered.contigs, $all.contigs. otherwise returns a data.table with calls.
 }
 \description{
 classifying loose end based on discordant read alignments by constructing pseudo-contigs based on consensus alignment patterns

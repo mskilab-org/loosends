@@ -1,3 +1,19 @@
+#' @import GenomicRanges
+#' @import data.table
+#' @import Matrix
+#' @import igraph
+#' @import Rsamtools
+#' @import reshape2
+#' @import rtracklayer
+#' @import gUtils
+#' @import bamUtils
+#' @import Biostrings
+#' @import RSeqLib
+#' @import gChain
+#' @import gTrack
+#' @import gGnome
+#' @import BSgenome.Hsapiens.UCSC.hg19
+
 #' @name call_loose_end_wrapper
 #' @title call_loose_end_wrapper
 #'
@@ -17,6 +33,8 @@
 #' $call table with calls
 #' $filtered.contigs data.table with filtered contigs
 #' $all.contigs data.table with all contigs
+#'
+#' @export
 call_loose_end_wrapper = function(id = "",
                                   le.dt = data.table(),
                                   reads.dt = data.table(),
@@ -362,7 +380,7 @@ find.telomeres = function(query, out.dt){
     gd = munch(out.dt, query)
     if(!(any(gd))) return(NULL)
     qns = out.dt[gd, qname]
-    do.call('c', lapply(qns, function(qn) reduce(GRanges(qn, IRanges(do.call('c', lapply(vwhichPDict(query, DNAStringSet(out.dt[.(qn), seq]))[[1]], function(i) as.integer(gregexpr(as.character(query@dict0)[i], out.dt[.(qn), seq])[[1]]))), width=18), strand="+"))))
+    do.call('c', lapply(qns, function(qn) GenomicRanges::reduce(GRanges(qn, IRanges(do.call('c', lapply(vwhichPDict(query, DNAStringSet(out.dt[.(qn), seq]))[[1]], function(i) as.integer(gregexpr(as.character(query@dict0)[i], out.dt[.(qn), seq])[[1]]))), width=18), strand="+"))))
 }
 
 #' caller
@@ -758,7 +776,7 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
         x = x %Q% (seqnames %in% mj)
         seqlevels(x) = mj
 
-        mate = reduce(parse.gr((x %Q% (seqnames %in% mj) %Q% (!seed) %Q% (mapq==60) %Q% (c_spec == "human"))$y) + 100)
+        mate = GenomicRanges::reduce(parse.gr((x %Q% (seqnames %in% mj) %Q% (!seed) %Q% (mapq==60) %Q% (c_spec == "human"))$y) + 100)
         junction = paste(c(gr.string(dt2gr(li)), gr.string(gr.start(mate, ignore.strand=F))), collapse = " | ")
         ## can't just be one -- in case of foldbacks break glass
         if(length(mate)>1){
@@ -767,8 +785,8 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
             } else if(!length((x %Q% (seqnames %in% mj) %Q% (seed) %Q% (mapq==60) %Q% (c_spec == "human")))){
                 complex = TRUE
             } else{
-                s = reduce(gr.flipstrand(parse.gr((x %Q% (seqnames %in% mj) %Q% (seed) %Q% (mapq==60) %Q% (c_spec == "human"))$y)))
-                if(length(reduce(grbind(mate, s))) > 2){
+                s = GenomicRanges::reduce(gr.flipstrand(parse.gr((x %Q% (seqnames %in% mj) %Q% (seed) %Q% (mapq==60) %Q% (c_spec == "human"))$y)))
+                if(length(GenomicRanges::reduce(grbind(mate, s))) > 2){
                     complex = TRUE
                 }
             }
@@ -905,8 +923,9 @@ gr.sum.strand = function(gr){
 #' @param pad optional, padding around loose end li to search for discordant reads, default=1e3
 #' @param ref_dir optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'
 #' @param ref_obj optional, list of BWA objects built from ref_dir fastas, names must match expected "human" "rep" "polyA" "microbe" (only "human" is used), default=NULL
-#' @param return.full also return reads
-#' @param 
+#' @param return.contigs return contigs if TRUE, otherwise just return
+#'
+#' @return if return.contigs is TRUE, returns a list with elements $call, $filtered.contigs, $all.contigs. otherwise returns a data.table with calls.
 read.based = function(li, ri, pad=NULL, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends'), ref_obj=NULL, return.contigs = FALSE){
     if(is.null(pad)) pad = 1e3
     t = ifelse(li$strand == "+", "sample.rev", "sample.for")
@@ -921,13 +940,13 @@ read.based = function(li, ri, pad=NULL, ref_dir=system.file('extdata', 'hg19_loo
         rtmp[is.dup(paste(qname, R1)), strand := ifelse(seed | !any(seed), strand, ifelse(strand=="-", "+", "-"))] ## in case of split alignment OF SEED READ, flip the strand of non-seed split (keep split of mate)
         rtmp = rtmp[mapq == 60]
         if(nrow(rtmp)==0 | rtmp[(seed), .N==0] | rtmp[!(seed), .N==0]) return(NULL)
-        ctig = reduce(gr.sum.strand(dt2gr(rtmp[(seed)])) %Q% (score > 0))
+        ctig = GenomicRanges::reduce(gr.sum.strand(dt2gr(rtmp[(seed)])) %Q% (score > 0))
         ctig = ctig[ctig %NN% dt2gr(rtmp[(seed)]) > 9]
         if(length(ctig)==0) return(NULL)
-        mate = reduce(gr.sum.strand(gr.flipstrand(dt2gr(rtmp[!(seed)]))) %Q% (score > 0))
+        mate = GenomicRanges::reduce(gr.sum.strand(gr.flipstrand(dt2gr(rtmp[!(seed)]))) %Q% (score > 0))
         mate = mate[mate %NN% gr.flipstrand(dt2gr(rtmp[!(seed)])) > 9]
         seed = mate %NN% ctig
-        ctig = as.data.table(reduce(c(gr.fix(ctig, mate), gr.fix(mate[seed > 0], ctig))))
+        ctig = as.data.table(GenomicRanges::reduce(c(gr.fix(ctig, mate), gr.fix(mate[seed > 0], ctig))))
         ctig[, read.cov := dt2gr(ctig) %NN% dt2gr(rtmp[(seed)])] ##rtmp[, sum(seed)]]
         ctig = rbind(ctig, as.data.table(mate[seed==0])[, read.cov := rtmp[, sum(!seed)]], use.names=T, fill=T)
         ctig[, map60.cov := read.cov]
@@ -1293,8 +1312,8 @@ prep_loose_ends = function(li, id = "") {
 #'
 #' Get loose reads data table ready for assembly
 #'
-#' @param li
-#' @param loose.reads.dt
+#' @param li (data.table from prep_loose_ends)
+#' @param loose.reads.dt (from loosereads_wrapper)
 #'
 #' @return data.table
 #' @export
@@ -1573,7 +1592,7 @@ call_loose_end = function(li, ri,
         dgr = parse.gr(disc$junction)
         s = gr.reduce(cgr[1], dgr[1], ignore.strand=F)
         m = gr.reduce(cgr[-1], dgr[-1], ignore.strand=F)
-        m = gr.start(reduce(m + 200) - 200, ignore.strand=F)
+        m = gr.start(GenomicRanges::reduce(m + 200) - 200, ignore.strand=F)
         paste(c(gr.string(s), gr.string(m)), collapse=" | ")
     }]
     call[, mystery := !missedj & !complex & mate.mappable & seed.mappable & !insertion]

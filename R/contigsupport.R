@@ -1,3 +1,19 @@
+#' @import GenomicRanges
+#' @import data.table
+#' @import Matrix
+#' @import igraph
+#' @import Rsamtools
+#' @import reshape2
+#' @import rtracklayer
+#' @import gUtils
+#' @import bamUtils
+#' @import Biostrings
+#' @import RSeqLib
+#' @import gChain
+#' @import gTrack
+#' @import gGnome
+#' @import BSgenome.Hsapiens.UCSC.hg19
+
 #' @name read_support_wrapper
 #' @title read_support_wrapper
 #'

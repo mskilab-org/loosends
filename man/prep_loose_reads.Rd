@@ -9,7 +9,9 @@ Get loose reads data table ready for assembly}
 prep_loose_reads(li, loose.reads.dt)
 }
 \arguments{
-\item{loose.reads.dt}{}
+\item{li}{(data.table from prep_loose_ends)}
+
+\item{loose.reads.dt}{(from loosereads_wrapper)}
 }
 \value{
 data.table

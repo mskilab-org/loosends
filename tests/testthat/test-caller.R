@@ -1,4 +1,5 @@
 library(gUtils)
+library(GenomicRanges)
 library(loosends)
 library(testthat)
 
@@ -64,13 +65,15 @@ test_that(desc = "check that loose reads are put into the correct format", code 
     )
 })
 
+## requires some functions within gUtils that don't work within testthat
+call.res = suppressWarnings(call_loose_end(li = le.dt, ri = reads.dt,
+                                           ref_obj = ref.obj,
+                                           mix.tn = TRUE,
+                                           verbose = FALSE))
+
 test_that(desc = "check that caller produces the expected call", code = {
     suppressWarnings(
         expr = {
-            call.res = call_loose_end(li = le.dt, ri = reads.dt,
-                                      ref_obj = ref.obj,
-                                      mix.tn = TRUE,
-                                      verbose = FALSE)
             expect_true(!is.null(call.res$call))
             expect_true(!is.null(call.res$filtered.contigs))
             expect_true(call.res$call$category == "type 1 loose end")
@@ -79,17 +82,19 @@ test_that(desc = "check that caller produces the expected call", code = {
     )
 })
 
+## requires some functions within gUtils that don't work within testthat
+call.res = suppressWarnings(call_loose_end_wrapper(id = this.pair,
+                                  le.dt = big.le.dt,
+                                  reads.dt = big.reads.dt,
+                                  ref_obj = ref.obj,
+                                  pad = 1000,
+                                  mix.tn = TRUE,
+                                  max.reads = 2e4,
+                                  verbose = FALSE))
+
 test_that(desc = "test wrapper for caller", code = {
     suppressWarnings(
         expr = {
-            call.res = call_loose_end_wrapper(id = this.pair,
-                                              le.dt = big.le.dt,
-                                              reads.dt = big.reads.dt,
-                                              ref_obj = ref.obj,
-                                              pad = 1000,
-                                              mix.tn = TRUE,
-                                              max.reads = 5000,
-                                              verbose = FALSE)
             expect_true(!is.null(call.res$call))
             expect_true(call.res$call[, .N] == 2)
             expect_true(!is.null(call.res$filtered.contigs))
