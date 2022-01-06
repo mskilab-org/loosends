@@ -7,12 +7,12 @@ ref = "~/DB/hg19/human_g1k_v37_decoy.fasta"
 
 ## TEST CASE 1
 ## files for first test case
-loosereads.bam = system.file("tests", "testthat", "data", "loosereads_1", "loosereads.bam", package = "loosends")
-aln.bam = system.file("tests", "testthat", "data", "loosereads_1", "aln.bam", package = "loosends")
-normal.loosereads.bam = system.file("tests", "testthat", "data", "loosereads_1_normal", "loosereads.bam", package = "loosends")
-normal.aln.bam = system.file("tests", "testthat", "data", "loosereads_1_normal", "aln.bam", package = "loosends")
-qnames.txt = system.file("tests", "testthat", "data", "loosereads_1", "qnames.txt", package = "loosends")
-windows.bed = system.file("tests", "testthat", "data", "loosereads_1", "windows.bed", package = "loosends")
+loosereads.bam = system.file("extdata", "tests", "loosereads_1", "loosereads.bam", package = "loosends")
+aln.bam = system.file("extdata", "tests", "loosereads_1", "aln.bam", package = "loosends")
+normal.loosereads.bam = system.file("extdata", "tests", "loosereads_1_normal", "loosereads.bam", package = "loosends")
+normal.aln.bam = system.file("extdata", "tests", "loosereads_1_normal", "aln.bam", package = "loosends")
+qnames.txt = system.file("extdata", "tests", "loosereads_1", "qnames.txt", package = "loosends")
+windows.bed = system.file("extdata", "tests", "loosereads_1", "windows.bed", package = "loosends")
 
 ## loci for first test case
 this.le = parse.gr("20:60158837-")

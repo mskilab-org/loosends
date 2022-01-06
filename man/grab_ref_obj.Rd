@@ -7,7 +7,7 @@
 grab_ref_obj(ref.dir = NA_character_)
 }
 \arguments{
-\item{ref_dir}{}
+\item{ref.dir}{(character) path to reference directory}
 }
 \value{
 list with names rep, human, polyA, microbe

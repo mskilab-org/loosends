@@ -2,8 +2,8 @@ library(testthat)
 library(loosends)
 library(gUtils)
 
-tbam = system.file("tests", "testthat", "data", "pipeline", "tumor.bam", package = "loosends")
-nbam = system.file("tests", "testthat", "data", "pipeline", "normal.bam", package = "loosends")
+tbam = system.file("extdata", "tests", "pipeline", "tumor.bam", package = "loosends")
+nbam = system.file("extdata", "tests", "pipeline", "normal.bam", package = "loosends")
 ranges = parse.gr(c("12:45763007-", "20:60158837-"))
 
 ref.dir = "~/git/loosends/inst/extdata/hg19_loosends"

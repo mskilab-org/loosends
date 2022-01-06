@@ -1372,7 +1372,7 @@ prep_loose_reads = function(li, loose.reads.dt) {
 #' @name grab_ref_obj
 #' @title grab_ref_obj
 #'
-#' @param ref_dir
+#' @param ref.dir (character) path to reference directory
 #'
 #' @return list with names rep, human, polyA, microbe
 grab_ref_obj = function(ref.dir = NA_character_) {

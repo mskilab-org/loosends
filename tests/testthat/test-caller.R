@@ -5,11 +5,11 @@ library(testthat)
 
 ## reference directory
 ref.dir = "~/git/loosends/inst/extdata/hg19_loosends"
-loosereads.fn = system.file("tests", "testthat", "data", "loosereads_1", "loosereads.res.rds", package = "loosends")
-reads.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "reads.dt.rds", package = "loosends")
-le.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "le.dt.rds", package = "loosends")
-big.reads.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "big.reads.dt.rds", package = "loosends")
-big.le.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "big.le.dt.rds", package = "loosends")
+loosereads.fn = system.file("extdata", "tests", "loosereads_1", "loosereads.res.rds", package = "loosends")
+reads.dt.fn = system.file("extdata", "tests", "loosereads_1", "reads.dt.rds", package = "loosends")
+le.dt.fn = system.file("extdata", "tests", "loosereads_1", "le.dt.rds", package = "loosends")
+big.reads.dt.fn = system.file("extdata", "tests", "loosereads_1", "big.reads.dt.rds", package = "loosends")
+big.le.dt.fn = system.file("extdata", "tests", "loosereads_1", "big.le.dt.rds", package = "loosends")
 
 ## useful params
 this.pair = "G32831.HCC1954"
