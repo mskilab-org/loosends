@@ -4,10 +4,10 @@ library(gUtils)
 
 ## reference directory
 ref.dir = "~/git/loosends/inst/extdata/hg19_loosends"
-reads.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "reads.dt.rds", package = "loosends")
-le.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "le.dt.rds", package = "loosends")
-contig.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "single.contig.rds", package = "loosends")
-multiple.dt.fn = system.file("tests", "testthat", "data", "loosereads_1", "multiple.contig.rds", package = "loosends")
+reads.dt.fn = system.file("extdata", "tests", "loosereads_1", "reads.dt.rds", package = "loosends")
+le.dt.fn = system.file("extdata", "tests", "loosereads_1", "le.dt.rds", package = "loosends")
+contig.dt.fn = system.file("extdata", "tests", "loosereads_1", "single.contig.rds", package = "loosends")
+multiple.dt.fn = system.file("extdata", "tests", "loosereads_1", "multiple.contig.rds", package = "loosends")
 
 ## params
 this.pair = "G32831.HCC1954"

@@ -2,7 +2,11 @@
 % Please edit documentation in R/filterloose.R
 \name{rel2abs}
 \alias{rel2abs}
-\title{rel2abs}
+\title{rel2abs
+
+rescales CN values from relative to "absolute" (i.e. per cancer cell copy) scale given purity and ploidy (forked from skitoosl)
+
+takes in gr with signal field "field"}
 \usage{
 rel2abs(
   gr,
@@ -42,8 +46,9 @@ rel2abs(
 numeric vector of integer copy numbers
 }
 \description{
-rescales CN values from relative to "absolute" (i.e. per cancer cell copy) scale given purity and ploidy
-}
-\details{
+rel2abs
+
+rescales CN values from relative to "absolute" (i.e. per cancer cell copy) scale given purity and ploidy (forked from skitoosl)
+
 takes in gr with signal field "field"
 }

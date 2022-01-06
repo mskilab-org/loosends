@@ -1,5 +1,4 @@
 library(gUtils)
-library(GenomicRanges)
 library(loosends)
 library(testthat)
 

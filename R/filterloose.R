@@ -1,6 +1,9 @@
-#' rel2abs
+
+
+#' @name rel2abs
+#' @title rel2abs
 #'
-#' rescales CN values from relative to "absolute" (i.e. per cancer cell copy) scale given purity and ploidy
+#' rescales CN values from relative to "absolute" (i.e. per cancer cell copy) scale given purity and ploidy (forked from skitoosl)
 #'
 #' takes in gr with signal field "field"
 #'

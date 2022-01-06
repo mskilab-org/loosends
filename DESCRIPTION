@@ -18,19 +18,19 @@ Remotes:
   bioc::3.10/Rsamtools,
 Depends:
     R (>= 3.5.1),
-    gUtils
+    gUtils,
+    Biostrings
 Imports:
-    data.table (>= 1.11),
     bamUtils,
+    data.table,
+    GenomicRanges,
     gGnome,
     igraph,
     Matrix,
     gTrack,
     reshape2,
-    Biostrings,
     RSeqLib,
     gChain,
-    GenomicRanges,
     rtracklayer,
     Rsamtools,
     BSgenome.Hsapiens.UCSC.hg19

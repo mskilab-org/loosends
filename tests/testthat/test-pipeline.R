@@ -1,6 +1,5 @@
 library(testthat)
 library(loosends)
-library(gUtils)
 
 tbam = system.file("extdata", "tests", "pipeline", "tumor.bam", package = "loosends")
 nbam = system.file("extdata", "tests", "pipeline", "normal.bam", package = "loosends")
