@@ -22,14 +22,14 @@ Depends:
     bamUtils,
     gGnome,
     gTrack,
-    gChain
+    gChain,
+    RSeqLib
 Imports:
     data.table (>= 1.11),
     igraph,
     Matrix,
     reshape2,
     Biostrings,
-    RSeqLib,
     GenomicRanges,
     rtracklayer,
     Rsamtools,
