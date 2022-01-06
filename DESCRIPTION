@@ -19,18 +19,20 @@ Remotes:
 Depends:
     R (>= 3.5.1),
     gUtils,
-    Biostrings
-Imports:
     bamUtils,
     data.table,
     GenomicRanges,
     gGnome,
+    gTrack,
+    gChain,
+    RSeqLib,
+    Biostrings
+Imports:
+    data.table (>= 1.11),
     igraph,
     Matrix,
-    gTrack,
     reshape2,
-    RSeqLib,
-    gChain,
+    GenomicRanges,
     rtracklayer,
     Rsamtools,
     BSgenome.Hsapiens.UCSC.hg19
