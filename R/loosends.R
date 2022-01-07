@@ -194,7 +194,7 @@ match.seq = function(query, subject)
         names(subject) = dedup(names(subject))
     }
 
-    totals = lengths(vwhichPDict(query, subject)) > 0
+    totals = base::lengths(Biostrings::vwhichPDict(query, subject)) > 0
     return(totals)
 }
 
@@ -380,7 +380,7 @@ find.telomeres = function(query, out.dt){
     gd = munch(out.dt, query)
     if(!(any(gd))) return(NULL)
     qns = out.dt[gd, qname]
-    do.call('c', lapply(qns, function(qn) GenomicRanges::reduce(GRanges(qn, IRanges(do.call('c', lapply(vwhichPDict(query, DNAStringSet(out.dt[.(qn), seq]))[[1]], function(i) as.integer(gregexpr(as.character(query@dict0)[i], out.dt[.(qn), seq])[[1]]))), width=18), strand="+"))))
+    do.call('c', lapply(qns, function(qn) GenomicRanges::reduce(GRanges(qn, IRanges(do.call('c', lapply(Biostrings::vwhichPDict(query, DNAStringSet(out.dt[.(qn), seq]))[[1]], function(i) as.integer(gregexpr(as.character(query@dict0)[i], out.dt[.(qn), seq])[[1]]))), width=18), strand="+"))))
 }
 
 #' caller

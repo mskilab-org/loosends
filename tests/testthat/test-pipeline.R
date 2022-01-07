@@ -8,18 +8,17 @@ ranges = parse.gr(c("12:45763007-", "20:60158837-"))
 ref.dir = "~/git/loosends/inst/extdata/hg19_loosends"
 outdir = "~/testing_tmp"
 
-res = suppressWarnings(
-    process_loose_ends(id = "G32831.HCC1954",
-                       ranges = ranges,
-                       tbam = tbam, nbam = nbam,
-                       ref_dir = ref.dir,
-                       outdir = outdir,
-                       read_pad = 5000,
-                       assembly_pad = 1000,
-                       verbose = FALSE)
-)
-
 test_that(desc = "process loose ends", code = {
+    res = suppressWarnings(
+        process_loose_ends(id = "G32831.HCC1954",
+                           ranges = ranges,
+                           tbam = tbam, nbam = nbam,
+                           ref_dir = ref.dir,
+                           outdir = outdir,
+                           read_pad = 5000,
+                           assembly_pad = 1000,
+                           verbose = FALSE)
+    )
     suppressWarnings(expr = {
         expect_true(!is.null(res$calls))
         expect_true(!is.null(res$contigs))

@@ -1,4 +1,4 @@
-
+#' @importFrom stats pnorm t.test wilcox.test setNames
 
 #' @name rel2abs
 #' @title rel2abs

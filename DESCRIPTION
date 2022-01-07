@@ -18,17 +18,15 @@ Remotes:
   bioc::3.10/Rsamtools,
 Depends:
     R (>= 3.5.1),
-    gUtils,
+    gUtils
+Imports:
+    data.table (>= 1.11),
     bamUtils,
-    data.table,
-    GenomicRanges,
     gGnome,
     gTrack,
     gChain,
     RSeqLib,
-    Biostrings
-Imports:
-    data.table (>= 1.11),
+    Biostrings,
     igraph,
     Matrix,
     reshape2,
