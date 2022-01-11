@@ -23,7 +23,8 @@
 #'
 #' @param le.dt (from prep_loose_ends)
 #' @param reads.dt (from loosereads)
-#' @param ref_obj (reference object)
+#' @param concat.bwa (BWA from RSeqLib) concatenated fasta
+#' @param human.bwa (BWA from RSeqLib)
 #' @param pad (window for local assembly)
 #' @param mix.tn (logical)
 #' @param max.reads (numeric) max reads per loose end before downsampling (default 5000)
@@ -38,11 +39,16 @@
 call_loose_end_wrapper = function(id = "",
                                   le.dt = data.table(),
                                   reads.dt = data.table(),
-                                  ref_obj = NULL,
+                                  concat.bwa = NULL,
+                                  human.bwa = NULL,
                                   pad = 5e3,
                                   mix.tn = TRUE,
                                   max.reads = 5000,
                                   verbose = FALSE) {
+
+    if (is.null(concat.bwa)) { stop("Must supply BWA object as concat.bwa") }
+    if (is.null(human.bwa)) { stop("Must supply BWA object as human.bwa") }
+        
     empty.res = list(call = data.table(), filtered.contigs = data.table(), all.contigs = data.table())
 
     le.dt = prep_loose_ends(li = le.dt, id = id)
@@ -69,7 +75,8 @@ call_loose_end_wrapper = function(id = "",
 
                           sub.res = call_loose_end(li = le.dt[ix,],
                                                    ri = ri,
-                                                   ref_obj = ref_obj,
+                                                   concat.bwa = concat.bwa,
+                                                   human.bwa = human.bwa,
                                                    pad = pad,
                                                    mix.tn = mix.tn,
                                                    max.reads = max.reads,
@@ -395,7 +402,13 @@ find.telomeres = function(query, out.dt){
 #' @param ref_obj optional, list of BWA objects built from ref_dir fastas, names must match expected "human" "rep" "polyA" "microbe" (only "human" is used), default=NULL
 #' @param return.contigs (logical)
 #' @export
-caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends'), ref_obj=NULL, return.contigs = FALSE) {
+caller = function(li,
+                  calns = NULL,
+                  insert = 750,
+                  pad=NULL,
+                  uannot=NULL,
+                  human = NULL,
+                  return.contigs = FALSE) {
     reference = FALSE
     complex = FALSE
     missedj = FALSE
@@ -410,12 +423,14 @@ caller = function(li, calns = NULL, insert = 750, pad=NULL, uannot=NULL, ref_dir
     if(is.null(uannot)){
         uannot = readRDS(system.file('extdata', '101.unmappable.annotations.rds', package='loosends'))
     }
-    if(!is.null(ref_obj)) { human = ref_obj$human
-    } else{
-        if(!file.exists(ref_dir)) stop("Provide correct ref_dir containing reference .fa files")
-        if(!file.exists(paste(ref_dir, "human_g1k_v37_decoy.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37_decoy.fasta")
-        human = BWA(fasta=paste(ref_dir, "human_g1k_v37_decoy.fasta", sep="/"))
-    }
+    ## if(!is.null(ref_obj)) { human = ref_obj$human
+    ## } else{
+    ##     if(!file.exists(ref_dir)) stop("Provide correct ref_dir containing reference .fa files")
+    ##     if(!file.exists(paste(ref_dir, "human_g1k_v37_decoy.fasta", sep="/"))) stop("ref_dir must contain human_g1k_v37_decoy.fasta")
+    ##     human = BWA(fasta=paste(ref_dir, "human_g1k_v37_decoy.fasta", sep="/"))
+    ## }
+
+    if (is.null(human)) { stop("Human cannot be null, please supply BWA object") }
     
     if(is.null(calns) | !nrow(calns)) {
         nrep = uannot[1]
@@ -921,12 +936,11 @@ gr.sum.strand = function(gr){
 #' @param li data.table loose end to classify
 #' @param ri data.table read alignments
 #' @param pad optional, padding around loose end li to search for discordant reads, default=1e3
-#' @param ref_dir optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'
-#' @param ref_obj optional, list of BWA objects built from ref_dir fastas, names must match expected "human" "rep" "polyA" "microbe" (only "human" is used), default=NULL
+#' @param human (human BWA)
 #' @param return.contigs return contigs if TRUE, otherwise just return
 #'
 #' @return if return.contigs is TRUE, returns a list with elements $call, $filtered.contigs, $all.contigs. otherwise returns a data.table with calls.
-read.based = function(li, ri, pad=NULL, ref_dir=system.file('extdata', 'hg19_looseends', package='loosends'), ref_obj=NULL, return.contigs = FALSE){
+read.based = function(li, ri, pad=NULL, human = NULL, return.contigs = FALSE){
     if(is.null(pad)) pad = 1e3
     t = ifelse(li$strand == "+", "sample.rev", "sample.for")
     ri = ri[rev(order(qwidth))][!duplicated(paste(R1, qname))]
@@ -977,7 +991,8 @@ read.based = function(li, ri, pad=NULL, ref_dir=system.file('extdata', 'hg19_loo
         out.dt$seq = character()
     }
 
-    res = caller(li, out.dt[is.dup(qname)], ref_dir=ref_dir, ref_obj=ref_obj,
+    ##res = caller(li, out.dt[is.dup(qname)], ref_dir=ref_dir, ref_obj=ref_obj,
+    res = caller(li, out.dt[is.dup(qname)], human = human,
                 return.contigs = return.contigs)
     return(res)
 }
@@ -1400,7 +1415,8 @@ grab_ref_obj = function(ref.dir = NA_character_) {
 #'
 #' @param li (data.table) data.table coercible to GRanges, must have metatdata $leix and $sample
 #' @param ri (data.table) loose reads table prepped (e.g. from prep_loose_reads)
-#' @param ref_obj (character) or a list of BWA indices, if ref_dir not provided
+#' @param concat.bwa (BWA object from RSeqLib)
+#' @param human.bwa (BWA object from RSeqLib)
 #' @param pad (numeric) window size for local assembly, default 1 kbp
 #' @param mix.tn (logical) mix tumor/normal reads before assembly
 #' @param max.reads (logical) maximum number of reads before downsampling (default 5000)
@@ -1411,16 +1427,17 @@ grab_ref_obj = function(ref.dir = NA_character_) {
 #' - wide.contigs (data.table or NULL)
 #' - call (data.table)
 call_loose_end = function(li, ri,
-                          ref_obj = NULL,
+                          concat.bwa = NULL, ## BWA object with concatenated reference
+                          human.bwa = NULL, ## BWA object with just human reference
                           pad = 1e3,
                           mix.tn = TRUE,
                           max.reads = 2500,
                           verbose = FALSE) {
     
-    human = ref_obj$human
-    rep = ref_obj$rep
-    polyA = ref_obj$polyA
-    microbe = ref_obj$microbe
+    ## human = ref_obj$human
+    ## rep = ref_obj$rep
+    ## polyA = ref_obj$polyA
+    ## microbe = ref_obj$microbe
     
     uannot = readRDS(system.file('extdata', '101.unmappable.annotations.rds', package='loosends'))
 
@@ -1450,57 +1467,91 @@ call_loose_end = function(li, ri,
         } else{
             out.dt$qname = character()
         }
-        if(verbose) message("aligning contigs to 4 references")
-        ureps = rep[out.dt$seq]
-        preps = polyA[out.dt$seq]
-        mreps = microbe[out.dt$seq]
-        hreps = human[out.dt$seq]
-        virals = seqlevels(microbe)[85:length(seqlevels(microbe))]
+
+        if (verbose) {
+            message("Aligning contigs to concatenated reference")
+        }
+
+        ## TODO: store this as a package global variable
+        keepseq = seqnames(seqinfo(concat.bwa))[c(1:87, 148:6398)]
+        rep.seqs = seqnames(seqinfo(concat.bwa))[1:60]
+        poly.seqs = seqnames(seqinfo(concat.bwa))[61]
+        human.seqs = seqnames(seqinfo(concat.bwa))[62:86]
+        viral.seqs = seqnames(seqinfo(concat.bwa))[148:6398]
+
+        ralns.og = concat.bwa[out.dt$seq]
+        keep.cols = c("cigar", "flag", "mapq", "AS", "qname")
+
+        if (length(ralns.og)) {
+            ralns.dt = as.data.table(ralns.og[, keep.cols]  %Q% (as.character(seqnames(ralns.og)) %in% keepseq))
+
+            ## transfer original values based on qname
+            setnames(ralns.dt, old = "qname", new = "qname.og")
+            out.dt.cols = setdiff(colnames(out.dt), colnames(ralns.dt))
+            ralns.dt = cbind(ralns.dt, out.dt[as.integer(ralns.dt$qname.og), ..out.dt.cols])
+
+            ralns.dt[as.character(seqnames) %in% rep.seqs, c_type := "rep"]
+            ralns.dt[as.character(seqnames) %in% poly.seqs, c_type := "polyA"]
+            ralns.dt[as.character(seqnames) %in% human.seqs, c_type := "human"]
+            ralns.dt[as.character(seqnames) %in% viral.seqs, c_type := "viral"]
+            ralns.dt[, c_spec := c_type]
+            ralns.dt[c_type == "rep", c_spec := dunlist(strsplit(as.character(seqnames), "#", fixed=T))[rev(!duplicated(rev(listid)))][order(as.integer(listid)), V1]]
+            calns = ralns.dt
+        } else {
+            calns = as.data.table(ralns.og)
+        }
+
+        ## if(verbose) message("aligning contigs to 4 references")
+        ## ureps = rep[out.dt$seq]
+        ## preps = polyA[out.dt$seq]
+        ## mreps = microbe[out.dt$seq]
+        ## hreps = human[out.dt$seq]
+        ## virals = seqlevels(microbe)[85:length(seqlevels(microbe))]
         
-        if(!(length(ureps))){
-            ureps$cigar = character()
-            ureps$mapq = character()
-            ureps$AS = integer()
-            ureps$flag = character()
-        }
-        if(!(length(preps))){
-            preps$cigar = character()
-            preps$mapq = character()
-            preps$AS = integer()
-            preps$flag = character()
-        }
-        if(!(length(hreps))){
-            hreps$cigar = character()
-            hreps$mapq = character()
-            hreps$AS = integer()
-            hreps$flag = character()
-        }
-        if(!(length(mreps))){
-            mreps$cigar = character()
-            mreps$mapq = character()
-            mreps$AS = integer()
-            mreps$flag = character()
-        }
-        keep.cols = c("cigar", "flag", "mapq", "AS")
-        values = rbind(out.dt[as.integer(ureps$qname)], out.dt[as.integer(preps$qname)], out.dt[as.integer(hreps$qname)], fill=T, use.names=T)
-        ralns = rbind(as.data.table(ureps[, keep.cols]), as.data.table(preps[, keep.cols]), as.data.table(hreps[, keep.cols]))
-        ralns = cbind(ralns, values)
-        if(nrow(out.dt)){
-            rch = cgChain(ralns)
-            good.ids = c(as.character(seqnames(gaps(rch$x) %Q% (strand=="+"))), setdiff(out.dt$qname, ralns$qname))
-            mreps$query.id  = as.integer(mreps$qname)
-            mreps$qname = out.dt[mreps$query.id, qname]
-            vreps = mreps %Q% (seqnames %in% virals) %Q% (qname %in% good.ids)
-            if(verbose & length(vreps)) message("adding viral alignments")
-            valns = cbind(as.data.table(vreps[, keep.cols]), out.dt[vreps$query.id])
-            calns = rbind(ralns, valns)
-            calns[, c_type := c(rep("rep", length(ureps)), rep("polyA", length(preps)), rep("human", length(hreps)), rep("viral", length(vreps)))]
-            calns[, c_spec := c_type]
-            calns[c_type == "rep", c_spec := dunlist(strsplit(as.character(seqnames), "#", fixed=T))[rev(!duplicated(rev(listid)))][order(as.integer(listid)), V1]]
-        } else{
-            calns = ralns
-        }
-        calns$somatic = rep(somatic, nrow(calns))
+        ## if(!(length(ureps))){
+        ##     ureps$cigar = character()
+        ##     ureps$mapq = character()
+        ##     ureps$AS = integer()
+        ##     ureps$flag = character()
+        ## }
+        ## if(!(length(preps))){
+        ##     preps$cigar = character()
+        ##     preps$mapq = character()
+        ##     preps$AS = integer()
+        ##     preps$flag = character()
+        ## }
+        ## if(!(length(hreps))){
+        ##     hreps$cigar = character()
+        ##     hreps$mapq = character()
+        ##     hreps$AS = integer()
+        ##     hreps$flag = character()
+        ## }
+        ## if(!(length(mreps))){
+        ##     mreps$cigar = character()
+        ##     mreps$mapq = character()
+        ##     mreps$AS = integer()
+        ##     mreps$flag = character()
+        ## }
+        ## keep.cols = c("cigar", "flag", "mapq", "AS")
+        ## values = rbind(out.dt[as.integer(ureps$qname)], out.dt[as.integer(preps$qname)], out.dt[as.integer(hreps$qname)], fill=T, use.names=T)
+        ## ralns = rbind(as.data.table(ureps[, keep.cols]), as.data.table(preps[, keep.cols]), as.data.table(hreps[, keep.cols]))
+        ## ralns = cbind(ralns, values)
+        ## if(nrow(out.dt)){
+        ##     rch = cgChain(ralns)
+        ##     good.ids = c(as.character(seqnames(gaps(rch$x) %Q% (strand=="+"))), setdiff(out.dt$qname, ralns$qname))
+        ##     mreps$query.id  = as.integer(mreps$qname)
+        ##     mreps$qname = out.dt[mreps$query.id, qname]
+        ##     vreps = mreps %Q% (seqnames %in% virals) %Q% (qname %in% good.ids)
+        ##     if(verbose & length(vreps)) message("adding viral alignments")
+        ##     valns = cbind(as.data.table(vreps[, keep.cols]), out.dt[vreps$query.id])
+        ##     calns = rbind(ralns, valns)
+        ##     calns[, c_type := c(rep("rep", length(ureps)), rep("polyA", length(preps)), rep("human", length(hreps)), rep("viral", length(vreps)))]
+        ##     calns[, c_spec := c_type]
+        ##     calns[c_type == "rep", c_spec := dunlist(strsplit(as.character(seqnames), "#", fixed=T))[rev(!duplicated(rev(listid)))][order(as.integer(listid)), V1]]
+        ## } else{
+        ##     calns = ralns
+        ## }
+        calns$somatic = rep("somatic", nrow(calns))
         calns$mapq = as.integer(calns$mapq)
 
         ## fill in dummy values
@@ -1571,17 +1622,20 @@ call_loose_end = function(li, ri,
     }
 
     if (mix.tn) {
-        res = caller(li, all.contigs, ref_obj = ref_obj, return.contigs = TRUE, pad = 5e3)
+        res = caller(li, all.contigs, human = human.bwa, 
+                     return.contigs = TRUE, pad = 5e3)
     } else {
         ## if not mixed, call should only be generated from tumor contigs
-        res = caller(li, all.contigs[grepl('sample', track),], ref_obj = ref_obj, return.contigs = TRUE)
+        res = caller(li, all.contigs[grepl('sample', track),],
+                     human = human.bwa,
+                     return.contigs = TRUE)
     }
 
 
     ## add junction annotation to cal
     call = res$call
     filtered.contigs = res$contigs
-    recall.res = read.based(li, ri, ref_obj=ref_obj, return.contigs = TRUE)
+    recall.res = read.based(li, ri, human = human.bwa, return.contigs = TRUE)
     disc = recall.res$call
     recall = (!call$missedj & disc$missedj) | (!call$complex & disc$complex)
     call[, missedj := missedj | disc$missedj]

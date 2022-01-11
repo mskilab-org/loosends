@@ -1,6 +1,10 @@
 #' @name process_loose_ends
 #' @title process_loose_ends
 #'
+#' @descriptiong
+#'
+#' Annotate a set of loose ends (ranges) based on local assembly of adjacent read pairs
+#'
 #' @param id (character) sample ID
 #' @param ranges (GRanges)
 #' @param tbam (character) path to tumor bam
@@ -26,6 +30,11 @@ process_loose_ends = function(id = "",
                               verbose = FALSE) {
 
     human.ref = paste0(ref_dir, "/human_g1k_v37_decoy.fasta")
+    concat.ref = paste0(ref_dir, "/concatenated_references_deduped.fasta")
+
+    human.bwa = RSeqLib::BWA(human.ref)
+    concat.bwa = RSeqLib::BWA(concat.ref)
+    
     reads.dt = loosereads_wrapper(ranges = ranges,
                                tbam = tbam,
                                nbam = nbam,
@@ -35,12 +44,12 @@ process_loose_ends = function(id = "",
                                verbose = verbose)
 
     le.dt = prep_loose_ends(li = ranges, id = id)
-    ref.obj = grab_ref_obj(ref.dir = ref_dir)
 
     calls = call_loose_end_wrapper(id = id,
                                    le.dt = le.dt,
                                    reads.dt = reads.dt,
-                                   ref_obj = ref.obj,
+                                   concat.bwa = concat.bwa,
+                                   human.bwa = human.bwa,
                                    pad = assembly_pad,
                                    mix.tn = TRUE,
                                    max.reads = 5000,
@@ -50,7 +59,7 @@ process_loose_ends = function(id = "",
                                    reads.dt = reads.dt,
                                    contigs.dt = calls$filtered.contigs,
                                    id = id,
-                                   ref.bwa = ref.obj$human,
+                                   ref.bwa = human.bwa,
                                    verbose = verbose)
 
 
