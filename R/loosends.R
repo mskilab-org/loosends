@@ -26,7 +26,8 @@
 #' @param concat.bwa (BWA from RSeqLib) concatenated fasta
 #' @param human.bwa (BWA from RSeqLib)
 #' @param pad (window for local assembly)
-#' @param mix.tn (logical)
+#' @param mix.tn (logical) mix tumor and normal reads? default TRUE
+#' @param minimap (logical) default FALSE
 #' @param max.reads (numeric) max reads per loose end before downsampling (default 5000)
 #' @param verbose
 #'
@@ -41,8 +42,11 @@ call_loose_end_wrapper = function(id = "",
                                   reads.dt = data.table(),
                                   concat.bwa = NULL,
                                   human.bwa = NULL,
+                                  concat.fn = NA_character_,
                                   pad = 5e3,
                                   mix.tn = TRUE,
+                                  minimap = FALSE,
+                                  outdir = "./",
                                   max.reads = 5000,
                                   verbose = FALSE) {
 
@@ -79,6 +83,9 @@ call_loose_end_wrapper = function(id = "",
                                                    human.bwa = human.bwa,
                                                    pad = pad,
                                                    mix.tn = mix.tn,
+                                                   concat.fn = concat.fn,
+                                                   minimap = minimap,
+                                                   outdir = paste0(outdir, "/", ix),
                                                    max.reads = max.reads,
                                                    verbose = verbose)
                           return(sub.res)
@@ -1384,6 +1391,37 @@ prep_loose_reads = function(li, loose.reads.dt) {
     return(ri)
 }
 
+#' @name minimap_index
+#' @title minimap_index
+#'
+#' @param fasta (character) path to fasta to pre-index
+#' @param outdir (character) path to target directory (created if not already exists)
+#' @param verbose (logical) default FALSE
+#'
+#' @return path to minimap indexed reference (.mmi)
+minimap_index = function(fasta = NA_character_, outdir = "./", verbose = FALSE) {
+    if (!dir.exists(outdir)) {
+        if (verbose) message("Creating output directory")
+        dir.create(outdir, recursive = TRUE)
+    }
+
+    if (!check_file(fasta)) {
+        stop("Fasta does not exist: ", fasta)
+    }
+
+    target.fn = paste0(outdir, "/", "target.mmi")
+    cmd = paste("minimap2 -x sr -d", target.fn, fasta)
+    sys.res = system(cmd)
+
+    if (sys.res) {
+        file.remove(target.fn)
+        stop("Error!")
+    }
+
+    return(target.fn)
+}
+    
+
 #' @name grab_ref_obj
 #' @title grab_ref_obj
 #'
@@ -1429,9 +1467,12 @@ grab_ref_obj = function(ref.dir = NA_character_) {
 call_loose_end = function(li, ri,
                           concat.bwa = NULL, ## BWA object with concatenated reference
                           human.bwa = NULL, ## BWA object with just human reference
-                          pad = 1e3,
+                          concat.fn = "~/git/loosends/inst/extdata/hg19_loosends/concatenated_references_deduped.fasta",
+                          pad = 5e3,
                           mix.tn = TRUE,
                           max.reads = 2500,
+                          outdir = "./",
+                          minimap = FALSE,
                           verbose = FALSE) {
     
     ## human = ref_obj$human
@@ -1443,6 +1484,10 @@ call_loose_end = function(li, ri,
 
     id = li$sample
 
+    if (!dir.exists(outdir)) {
+        if (verbose) message("Creating output directory")
+        dir.create(outdir, recursive = TRUE)
+    }
 
     if (verbose) {
         message("Generating call")
@@ -1468,8 +1513,69 @@ call_loose_end = function(li, ri,
             out.dt$qname = character()
         }
 
+        ## save contigs as FASTA
+        if (out.dt[, .N]) {
+            unique.tigs = unique(out.dt, by = "qname")
+            tigs.vec = setNames(object = unique.tigs[, seq], nm = unique.tigs[, qname])
+            tigs.strings = Biostrings::DNAStringSet(tigs.vec)
+            Biostrings::writeXStringSet(tigs.strings, paste0(outdir, "/", "contigs.fasta"))
+        }
+
         if (verbose) {
             message("Aligning contigs to concatenated reference")
+        }
+
+        if (minimap) {
+            if (verbose) message("Using minimap for contig alignment")
+
+            contigs.aln.bam.fn = paste0(outdir, "/", "contigs.aln.bam")
+            contigs.aln.sorted.bam.fn = paste0(outdir, "/", "contigs.aln.sorted.bam")
+            contigs.aln.sam.fn = paste0(outdir, "/", "contigs.aln.sam")
+
+            if (verbose) message("starting short read single end alignment")
+            cmd = paste("minimap2 -ax sr --secondary=yes",
+                        concat.fn,
+                        paste0(outdir, "/", "contigs.fasta"),
+                        ">",
+                        contigs.aln.sam.fn)
+
+            sys.res = system(cmd)
+            if (sys.res) {
+                file.remove(contigs.aln.sam.fn)
+                stop("Error!")
+            }
+
+            cmd = paste("samtools view -Sb", contigs.aln.sam.fn, ">", contigs.aln.bam.fn)
+            sys.res = system(cmd)
+            
+            if (sys.res) {
+                file.remove(contigs.aln.bam.fn)
+                stop("Error!")
+            }
+
+            cmd = paste("samtools sort", contigs.aln.bam.fn, ">", contigs.aln.sorted.bam.fn, ";",
+                        "samtools index", contigs.aln.sorted.bam.fn)
+            sys.res = system(cmd)
+            
+            if (sys.res) {
+                file.remove(contigs.aln.bam.sorted.fn)
+                stop("Error!")
+            }
+
+            ## read BAM from single end alignment
+            aln.gr = read.bam(bam = contigs.aln.sorted.bam.fn,
+                              all = TRUE,
+                              pairs.grl = FALSE,
+                              tag="AS",
+                              isPaired = NA)
+            ralns.og = aln.gr
+            ## don't include unaligned reads?
+            ralns.og = ralns.og %Q% (!is.na(qname))
+        } else {
+            ralns.og = concat.bwa[out.dt$seq]
+            if (length(ralns.og)) {
+                values(ralns.og)[, "qname"] = out.dt[as.integer(ralns.og$qname), qname]
+            }
         }
 
         ## TODO: store this as a package global variable
@@ -1479,7 +1585,7 @@ call_loose_end = function(li, ri,
         human.seqs = seqnames(seqinfo(concat.bwa))[62:86]
         viral.seqs = seqnames(seqinfo(concat.bwa))[148:6398]
 
-        ralns.og = concat.bwa[out.dt$seq]
+        
         keep.cols = c("cigar", "flag", "mapq", "AS", "qname")
 
         if (length(ralns.og)) {
@@ -1488,7 +1594,7 @@ call_loose_end = function(li, ri,
             ## transfer original values based on qname
             setnames(ralns.dt, old = "qname", new = "qname.og")
             out.dt.cols = setdiff(colnames(out.dt), colnames(ralns.dt))
-            ralns.dt = cbind(ralns.dt, out.dt[as.integer(ralns.dt$qname.og), ..out.dt.cols])
+            ralns.dt = cbind(ralns.dt, out.dt[match(ralns.dt$qname.og, qname), ..out.dt.cols])
 
             ralns.dt[as.character(seqnames) %in% rep.seqs, c_type := "rep"]
             ralns.dt[as.character(seqnames) %in% poly.seqs, c_type := "polyA"]
@@ -1496,7 +1602,7 @@ call_loose_end = function(li, ri,
             ralns.dt[as.character(seqnames) %in% viral.seqs, c_type := "viral"]
             ralns.dt[, c_spec := c_type]
             ralns.dt[c_type == "rep", c_spec := dunlist(strsplit(as.character(seqnames), "#", fixed=T))[rev(!duplicated(rev(listid)))][order(as.integer(listid)), V1]]
-            calns = ralns.dt
+            calns = ralns.dt[!(is.na(cigar) | is.na(AS) | is.na(flag) | is.na(mapq))]
         } else {
             calns = as.data.table(ralns.og)
         }
@@ -1558,6 +1664,7 @@ call_loose_end = function(li, ri,
         calns[, ":="(read.cov = NA, map60.cov = NA, tumor.frac = NA,
                      tumor.support = NA, normal.support = NA, total.support = NA)]
 
+
         if(verbose) message("parsing contigs for telomeric matches")
         all.contigs = copy(calns)
         if (nrow(all.contigs)) {
@@ -1584,7 +1691,7 @@ call_loose_end = function(li, ri,
     if (verbose) {
         message("Building contigs")
     }
-    ## browser()
+
     somatic = as.logical(nrow(ri[grepl("control", track)]))
     wholseed = dt2gr(li)[,c()] + pad ##dt2gr(li)[,c()]+1e3
     if (verbose) {

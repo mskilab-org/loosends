@@ -31,51 +31,71 @@ big.reads.dt = readRDS(big.reads.dt.fn)
 concat = BWA(fasta = concat.fasta.fn)
 human = BWA(fasta = human.fasta.fn)
 
-test_that(desc = "check that loose ends are put into correct format", code = {
-    suppressWarnings(
-        expr = {
-            le.dt = prep_loose_ends(this.le, id = this.pair)
-            expect_true(!is.null(le.dt$leix))
-            expect_true(all(le.dt$sample == this.pair))
-        }
-    )
-})
+## test_that(desc = "check that loose ends are put into correct format", code = {
+##     suppressWarnings(
+##         expr = {
+##             le.dt = prep_loose_ends(this.le, id = this.pair)
+##             expect_true(!is.null(le.dt$leix))
+##             expect_true(all(le.dt$sample == this.pair))
+##         }
+##     )
+## })
 
-test_that(desc = "check that loose reads are put into the correct format", code = {
-    suppressWarnings(
-        expr = {
-            reads.dt = prep_loose_reads(li = le.dt, loose.reads.dt = loosereads.dt)
-            ## check that concord and anchor are added
-            expect_true(!is.null(reads.dt$anchor))
-            expect_true(!is.null(reads.dt$concord))
-            ## minus strand reads are reverse complemented
-            expect_true(all(reads.dt[strand == "-", seq != reading.frame]))
-            expect_true(all(reads.dt[strand == "+", seq == reading.frame]))
-        }
-    )
-})
+## test_that(desc = "check that loose reads are put into the correct format", code = {
+##     suppressWarnings(
+##         expr = {
+##             reads.dt = prep_loose_reads(li = le.dt, loose.reads.dt = loosereads.dt)
+##             check that concord and anchor are added
+##             expect_true(!is.null(reads.dt$anchor))
+##             expect_true(!is.null(reads.dt$concord))
+##             minus strand reads are reverse complemented
+##             expect_true(all(reads.dt[strand == "-", seq != reading.frame]))
+##             expect_true(all(reads.dt[strand == "+", seq == reading.frame]))
+##         }
+##     )
+## })
 
-test_that(desc = "check that loose reads are put into the correct format", code = {
-    suppressWarnings(
-        expr = {
-            reads.dt = prep_loose_reads(li = le.dt, loose.reads.dt = loosereads.dt)
-            ## check that concord and anchor are added
-            expect_true(!is.null(reads.dt$anchor))
-            expect_true(!is.null(reads.dt$concord))
-            ## minus strand reads are reverse complemented
-            expect_true(all(reads.dt[strand == "-", seq != reading.frame]))
-            expect_true(all(reads.dt[strand == "+", seq == reading.frame]))
-        }
-    )
-})
+## test_that(desc = "check that loose reads are put into the correct format", code = {
+##     suppressWarnings(
+##         expr = {
+##             reads.dt = prep_loose_reads(li = le.dt, loose.reads.dt = loosereads.dt)
+##             check that concord and anchor are added
+##             expect_true(!is.null(reads.dt$anchor))
+##             expect_true(!is.null(reads.dt$concord))
+##             minus strand reads are reverse complemented
+##             expect_true(all(reads.dt[strand == "-", seq != reading.frame]))
+##             expect_true(all(reads.dt[strand == "+", seq == reading.frame]))
+##         }
+##     )
+## })
 
+## test_that(desc = "check that caller produces the expected call", code = {
+##     suppressWarnings(
+##         expr = {
+##             call.res = call_loose_end(li = le.dt, ri = reads.dt,
+##                                       concat.bwa = concat,
+##                                       human.bwa = human,
+##                                       mix.tn = TRUE,
+##                                       verbose = FALSE)
+##             expect_true(!is.null(call.res$call))
+##             expect_true(!is.null(call.res$filtered.contigs))
+##             expect_true(call.res$call$category == "type 1 loose end")
+##             expect_true(call.res$filtered.contigs[, .N] > 0)
+##         }
+##     )
+## })
 
-test_that(desc = "check that caller produces the expected call", code = {
+test_that(desc = "check that caller with minimap produces expected call", code = {
     suppressWarnings(
         expr = {
             call.res = call_loose_end(li = le.dt, ri = reads.dt,
                                       concat.bwa = concat,
                                       human.bwa = human,
+                                      concat.fn = concat.fasta.fn,
+                                      pad = 5e3,
+                                      max.reads = 2e4,
+                                      outdir = "~/testing_tmp",
+                                      minimap = TRUE,
                                       mix.tn = TRUE,
                                       verbose = FALSE)
             expect_true(!is.null(call.res$call))
@@ -87,23 +107,48 @@ test_that(desc = "check that caller produces the expected call", code = {
 })
 
 
-test_that(desc = "test wrapper for caller", code = {
-    suppressWarnings(
-        expr = {
-            call.res = suppressWarnings(call_loose_end_wrapper(id = this.pair,
-                                                               le.dt = big.le.dt,
-                                                               reads.dt = big.reads.dt,
-                                                               concat.bwa = concat,
-                                                               human.bwa = human,
-                                                               pad = 1000,
-                                                               mix.tn = TRUE,
-                                                               max.reads = 2e4,
-                                                               verbose = FALSE))
-            expect_true(!is.null(call.res$call))
-            expect_true(call.res$call[, .N] == 2)
-            expect_true(!is.null(call.res$filtered.contigs))
-            expect_true("type 1 loose end" %in% call.res$call$category)
-            expect_true(call.res$filtered.contigs[, .N] > 0)
-        }
-    )
-})
+## test_that(desc = "test wrapper for caller", code = {
+##     suppressWarnings(
+##         expr = {
+##             call.res = suppressWarnings(call_loose_end_wrapper(id = this.pair,
+##                                                                le.dt = big.le.dt,
+##                                                                reads.dt = big.reads.dt,
+##                                                                concat.bwa = concat,
+##                                                                human.bwa = human,
+##                                                                pad = 1000,
+##                                                                mix.tn = TRUE,
+##                                                                minimap = FALSE,
+##                                                                max.reads = 2e4,
+##                                                                verbose = FALSE))
+##             expect_true(!is.null(call.res$call))
+##             expect_true(call.res$call[, .N] == 2)
+##             expect_true(!is.null(call.res$filtered.contigs))
+##             expect_true("type 1 loose end" %in% call.res$call$category)
+##             expect_true(call.res$filtered.contigs[, .N] > 0)
+##         }
+##     )
+## })
+
+## test_that(desc = "test that caller wrapper works with minimap", code = {
+##     suppressWarnings(
+##         expr = {
+##             call.res = suppressWarnings(call_loose_end_wrapper(id = this.pair,
+##                                                                le.dt = big.le.dt,
+##                                                                reads.dt = big.reads.dt,
+##                                                                concat.bwa = concat,
+##                                                                human.bwa = human,
+##                                                                concat.fn = concat.fasta.fn
+##                                                                pad = 5e3,
+##                                                                mix.tn = TRUE,
+##                                                                minimap = TRUE,
+##                                                                outdir = "~/testing_tmp",
+##                                                                max.reads = 2e4,
+##                                                                verbose = FALSE))
+##             expect_true(!is.null(call.res$call))
+##             expect_true(call.res$call[, .N] == 2)
+##             expect_true(!is.null(call.res$filtered.contigs))
+##             expect_true("type 1 loose end" %in% call.res$call$category)
+##             expect_true(call.res$filtered.contigs[, .N] > 0)
+##         }
+##     )
+## })
