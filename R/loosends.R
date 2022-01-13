@@ -1570,7 +1570,9 @@ call_loose_end = function(li, ri,
                               isPaired = NA)
             ralns.og = aln.gr
             ## don't include unaligned reads?
-            ralns.og = ralns.og %Q% (!is.na(qname))
+            if (length(ralns.og)) {
+                ralns.og = ralns.og %Q% (!is.na(qname))
+            }
         } else {
             ralns.og = concat.bwa[out.dt$seq]
             if (length(ralns.og)) {
