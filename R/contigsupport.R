@@ -131,6 +131,8 @@ read_support_wrapper = function(le.dt = data.table(),
 #' @param contigs.dt (data.table) data.table with colnames track, peak, qname. all qnames should be identical.
 #' @param seed.pad (numeric) pad around seed for getting supporting reads
 #' @param all.reads (logical) return all input reads or just the chunks supporing the contig? (default FALSE)
+#' @param bowtie (logical) use bowtie to align reads? if TRUE, fasta must be provided
+#' @param outdir (character) output directory for temporary files
 #' @param verbose (logical)
 #' @param ... additional parameters to contig.support
 #' 
@@ -149,6 +151,8 @@ read_support = function(le.dt = data.table(),
                         isize.diff = 1e3,
                         seed.pad = 150,
                         all.reads = FALSE,
+                        bowtie = FALSE,
+                        outdir = "./",
                         verbose = FALSE,
                         ...) {
 
@@ -172,19 +176,25 @@ read_support = function(le.dt = data.table(),
 
     if (is.null(ref.bwa)) {
 
-        if (check_file(fasta)) {
-            if (verbose) {
-                message("Building BWA object from supplied FASTA: ", fasta)
-            }
-            ref.bwa = BWA(fasta = fasta)
+        if (bowtie) {
+            ref.bwa = fasta
         } else {
-            if (verbose) {
-                message("Grabbing reference sequence around loose end")
+
+            if (check_file(fasta)) {
+                if (verbose) {
+                    message("Building BWA object from supplied FASTA: ", fasta)
+                }
+                ref.bwa = BWA(fasta = fasta)
+            } else {
+                if (verbose) {
+                    message("Grabbing reference sequence around loose end")
+                }
+                wholseed = li[,c()] + seed.pad
+                rs = getSeq(Hsapiens, trim(gr.fix(gr.chr(wholseed + 15000), Hsapiens)))
+                refseq = as.character(rs)
+                ref.bwa = BWA(refseq)
             }
-            wholseed = li[,c()] + pad
-            rs = getSeq(Hsapiens, trim(gr.fix(gr.chr(wholseed + 15000), Hsapiens)))
-            refseq = as.character(rs)
-            ref.bwa = BWA(refseq)
+
         }
         
     } else {
@@ -206,10 +216,27 @@ read_support = function(le.dt = data.table(),
     window.reads.dt = reads.dt[qname %in% seed$qname] ## which reads correspond with that qname?
 
     if (verbose) {
+        message("Building contig gChain")
+    }
+
+    sn = unlist(lapply(strsplit(contigs.dt[, y], ":"), function(x) {x[[1]]}))
+    strand = sapply(contigs.dt[, y], function(x) {substring(x, first = nchar(x), last = nchar(x))})
+    start = gsub("-[0-9]+.*$", "", gsub(".+:", "", contigs.dt[, y]))
+    end = gsub("[-|\\+]+$", "", gsub(".+:[0-9]+-", "", contigs.dt[, y]))
+    cg.contig = gChain::cgChain(GRanges(seqnames = sn,
+                                        ranges = IRanges(start = as.numeric(start),
+                                                         end = as.numeric(end)),
+                                        strand = strand,
+                                        cigar = contigs.dt[, cigar],
+                                        qname = contigs.dt[, qname]))
+
+    if (verbose) {
         message("Starting contig support")
     }
+
     rc = contig.support(dt2gr(window.reads.dt),
                         contigs.dt,
+                        cg.contig = cg.contig,
                         ref = ref.bwa,## refseq,
                         chimeric = chimeric,
                         strict = strict,
@@ -217,6 +244,8 @@ read_support = function(le.dt = data.table(),
                         min.aligned.frac = min.aligned.frac,
                         isize.diff = isize.diff,
                         verbose = verbose,
+                        bowtie = bowtie,
+                        outdir = outdir,
                         ...)
 
     window.reads.dt[, supporting := qname %in% rc$qname]
@@ -264,12 +293,28 @@ read_support = function(le.dt = data.table(),
 #' @param chimeric logical flag whether to require reads to support junctions in chimericcontigs (ie discontiguous chunks on the reference), chimeric = FALSE
 #' @param strict strict requires that the alignment score of the read to contig alignment needs to be better for at least one read (and also not worse for any of the reads) 
 #' @param isize.diff (numeric) the insert size in the reference vs. the insert size in the contig between discordant read pairs
+#' @param min.bases (numeric) min aligned bases to be considered valid alignment, default 20
+#' @param min.aligned.frac (numeric) min fraction of bases in alignment that are matching, default 0.95
+#' @param new (logical) new scoring scheme, default TRUE
+#' @param bowtie (logical) use bowtie for read alignment? requires bowtie to be callable from command line, default FALSE (use BWA)
+#' @param outdir (logical) output directory for bowtie2 temporary files
 #' 
 #' @return reads re-aligned to the reference through the contigs with additional metadata describing features of the alignment
 #' @export
 #' @author Marcin Imielinski
 
-contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = TRUE, cg.contig = gChain::cgChain(contig), isize.diff = 1e3, min.bases = 20, min.aligned.frac = 0.95, new = TRUE, 
+contig.support = function(reads,
+                          contig,
+                          ref = NULL,
+                          chimeric = TRUE,
+                          strict = TRUE,
+                          cg.contig = gChain::cgChain(contig),
+                          isize.diff = 1e3,
+                          min.bases = 20,
+                          min.aligned.frac = 0.95,
+                          new = TRUE,
+                          bowtie = FALSE,
+                          outdir = "./",
                           verbose = TRUE)
 {
     if (length(reads)==0)
@@ -319,10 +364,31 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
         }
 
         ## tmp = bwa.ref[reads$seq] %>% gr2dt
-        tmp = bwa.ref[reads$reading.frame] %>% gr2dt
-        tmp$ix = as.numeric(as.character(tmp$qname))
-        tmp$R1 = reads$R1[tmp$ix]
-        tmp$qname = reads$qname[tmp$ix]
+        if (bowtie) {
+            if (verbose) { message("Using Bowtie for read to contig alignment!") }
+            ## infer the name from the basename of the ref file
+            if (!inherits(ref, 'character')) {
+                stop("Must supply path to reference")
+            }
+            fasta.dirname = dirname(ref)
+            fasta.basename = basename(ref)
+            if (!dir.exists(fasta.dirname)) {
+                stop("Ref directory does not exist!")
+            }
+            fasta.name = gsub("\\.(fasta|fa|fastq|fq).*$", "", fasta.basename)
+            if (verbose) { message("Using reference name: ", fasta.name) }
+            tmp = bowtie_aln(reads = as.data.table(reads),
+                             ref.dir = dirname(ref),
+                             ref.basename = fasta.name,
+                             outdir = paste0(outdir, "/ref"),
+                             verbose = verbose)
+            tmp = as.data.table(tmp)
+        } else {
+            tmp = bwa.ref[reads$reading.frame] %>% gr2dt
+            tmp$ix = as.numeric(as.character(tmp$qname))
+            tmp$R1 = reads$R1[tmp$ix]
+            tmp$qname = reads$qname[tmp$ix]
+        }
         tmp = unique(tmp, by = c('qname', 'R1'))
         setkeyv(tmp, c('qname', 'R1'))
         if (nrow(tmp))
@@ -358,17 +424,28 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
     reads$ref.aligned.frac = rdt$ref.aligned.frac
 
     ## readsc is a data.table that denotes read locations in contig coordinates
-    readsc = bwa.contig[reads$reading.frame] %>% gr2dt
+    if (bowtie) {
+        contigs.dt = unique(gr2dt(contig), by = c('qname'))
+        readsc = bowtie_aln(reads = as.data.table(reads),
+                            ref.seq = contigs.dt[, .(qname, seq)],
+                            outdir = paste0(outdir, "/contig"),
+                            verbose = verbose)
+        readsc = as.data.table(readsc)
+    } else {
+        readsc = bwa.contig[reads$reading.frame] %>% gr2dt
+        readsc$ix = as.integer(as.character(readsc$qname))
+        readsc$R1 = reads$R1[readsc$ix]
+        
+    }
 
     ## important! if no reads align to the contig then the following will fail!
     if (!nrow(readsc)) {
         return(reads[c()])
     }
-    
-    readsc$cigar = as.character(readsc$cigar)
-    readsc$ix = as.integer(as.character(readsc$qname))
-    readsc$R1 = reads$R1[readsc$ix]
+
     readsc$read.id = reads$read.id[readsc$ix]
+    readsc$cigar = as.character(readsc$cigar)
+    
 
     ## these are splits on the contig, not reference --> shouldn't be any for good alignment
     readsc[, nsplit := .N, by = .(qname, R1)] 
@@ -394,8 +471,8 @@ contig.support = function(reads, contig, ref = NULL, chimeric = TRUE, strict = T
     readsc$qname = reads$qname[readsc$ix]
 
     ## track sample (comment out later)
-    tst = readsc[, .(aligned.frac, AS, AS.og, ref.aligned.frac, qname)][, sample := rdt$sample[match(qname, rdt$qname)]]
-    tst[, .(aligned.frac, ref.aligned.frac, AS, AS.og, sample)]
+    ## tst = readsc[, .(aligned.frac, AS, AS.og, ref.aligned.frac, qname)][, sample := rdt$sample[match(qname, rdt$qname)]]
+    ## tst[, .(aligned.frac, ref.aligned.frac, AS, AS.og, sample)]
     
     ## new scoring method based on cgChain of reads to contigs
     if (new)

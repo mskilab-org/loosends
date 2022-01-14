@@ -947,7 +947,7 @@ gr.sum.strand = function(gr){
 #' @param return.contigs return contigs if TRUE, otherwise just return
 #'
 #' @return if return.contigs is TRUE, returns a list with elements $call, $filtered.contigs, $all.contigs. otherwise returns a data.table with calls.
-read.based = function(li, ri, pad=NULL, human = NULL, return.contigs = FALSE){
+read.based = function(li, ri, pad=NULL, human = NULL, return.contigs = FALSE, mapq.thresh = 60){
     if(is.null(pad)) pad = 1e3
     t = ifelse(li$strand == "+", "sample.rev", "sample.for")
     ri = ri[rev(order(qwidth))][!duplicated(paste(R1, qname))]
@@ -959,7 +959,8 @@ read.based = function(li, ri, pad=NULL, human = NULL, return.contigs = FALSE){
         rtmp = ri[qname %in% qname[seed]]
         rtmp[(seed)][is.dup(qname), seed := R1 == R1[1], by=qname] ## in case of a foldback where both reads are "seed", choose one as the anchor
         rtmp[is.dup(paste(qname, R1)), strand := ifelse(seed | !any(seed), strand, ifelse(strand=="-", "+", "-"))] ## in case of split alignment OF SEED READ, flip the strand of non-seed split (keep split of mate)
-        rtmp = rtmp[mapq == 60]
+        ## ONLY USES MAPQ 60 READS FOR CALLING??
+        rtmp = rtmp[mapq >= mapq.thresh]
         if(nrow(rtmp)==0 | rtmp[(seed), .N==0] | rtmp[!(seed), .N==0]) return(NULL)
         ctig = GenomicRanges::reduce(gr.sum.strand(dt2gr(rtmp[(seed)])) %Q% (score > 0))
         ctig = ctig[ctig %NN% dt2gr(rtmp[(seed)]) > 9]
@@ -1748,7 +1749,13 @@ call_loose_end = function(li, ri,
     ## add junction annotation to cal
     call = res$call
     filtered.contigs = res$contigs
-    recall.res = read.based(li, ri, human = human.bwa, return.contigs = TRUE)
+    ## HACK HACK
+    bowtie = max(ri[, mapq], na.rm = TRUE) < 60 ## you know it's bowtie if mapqs only go up to 44
+    if (bowtie) {
+        recall.res = read.based(li, ri, pad = pad, human = human.bwa, return.contigs = TRUE, mapq.thresh = 30)
+    } else {
+        recall.res = read.based(li, ri, pad = pad, human = human.bwa, return.contigs = TRUE)
+    }
     disc = recall.res$call
     recall = (!call$missedj & disc$missedj) | (!call$complex & disc$complex)
     call[, missedj := missedj | disc$missedj]
