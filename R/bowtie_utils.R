@@ -166,6 +166,7 @@ bowtie_index = function(fasta.fn = NA_character_, ref.id = "target", verbose = F
         message("Finished indexing reference!")
         message("Switching back to directory: ", currdir)
     }
+    setwd(currdir)
 
     return(newdir)
 }

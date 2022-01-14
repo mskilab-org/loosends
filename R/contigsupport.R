@@ -23,6 +23,9 @@
 #' @param id (character) sample id
 #' @param pad (numeric) window for getting supporting reads
 #' @param ref.bwa (human output from grab_ref_obj)
+#' @param ref.fasta (character) path to fasta if using bowtie
+#' @param bowtie (logical) default FALSE
+#' @param outdir (character) dirname for temporary files
 #' @param verbose (logical)
 #'
 #' @return data.table with columns
@@ -39,6 +42,9 @@ read_support_wrapper = function(le.dt = data.table(),
                                 id = "",
                                 pad = 5e3,
                                 ref.bwa = NULL,
+                                ref.fasta = NULL,
+                                bowtie = FALSE,
+                                outdir = ".",
                                 verbose = FALSE) {
 
     empty.res = data.table(leix = numeric(),
@@ -59,6 +65,17 @@ read_support_wrapper = function(le.dt = data.table(),
 
     if (!contigs.dt[, .N]) {
         return(empty.res)
+    }
+
+    ## check inputs
+    if (bowtie) {
+        if (is.null(ref.fasta)) {
+            stop("Please supply fasta if running bowtie")
+        }
+    } else {
+        if (is.null(ref.bwa)) {
+            stop("Please supply BWA object if running BWA")
+        }
     }
 
     unique.leix = unique(contigs.dt$leix)
@@ -85,6 +102,9 @@ read_support_wrapper = function(le.dt = data.table(),
                                                 reads.dt = ri,
                                                 contigs.dt = this.contigs,
                                                 ref.bwa = ref.bwa,
+                                                fasta = ref.fasta,
+                                                bowtie = bowtie,
+                                                outdir = paste0(outdir, "/", qn), ## different dir per qname
                                                 verbose = verbose)
                               gc() ## release memory?
                               if (rc[, .N]) {
@@ -174,11 +194,11 @@ read_support = function(le.dt = data.table(),
         stop("some contigs have different qnames")
     }
 
-    if (is.null(ref.bwa)) {
-
-        if (bowtie) {
-            ref.bwa = fasta
-        } else {
+    if (bowtie) {
+        ref.bwa = fasta
+    } else {
+    
+        if (is.null(ref.bwa)) {
 
             if (check_file(fasta)) {
                 if (verbose) {
@@ -194,16 +214,15 @@ read_support = function(le.dt = data.table(),
                 refseq = as.character(rs)
                 ref.bwa = BWA(refseq)
             }
-
-        }
-        
-    } else {
-        if (inherits(ref.bwa, 'BWA')) {
-            if (verbose) {
-                message("Using supplied ref.bwa")
-            }
+            
         } else {
-            stop("Invalid format supplied for BWA")
+            if (inherits(ref.bwa, 'BWA')) {
+                if (verbose) {
+                    message("Using supplied ref.bwa")
+                }
+            } else {
+                stop("Invalid format supplied for BWA")
+            }
         }
     }
 
@@ -380,7 +399,7 @@ contig.support = function(reads,
             tmp = bowtie_aln(reads = as.data.table(reads),
                              ref.dir = dirname(ref),
                              ref.basename = fasta.name,
-                             outdir = paste0(outdir, "/ref"),
+                             outdir = normalizePath(file.path(outdir, "ref")),
                              verbose = verbose)
             tmp = as.data.table(tmp)
         } else {
@@ -428,7 +447,7 @@ contig.support = function(reads,
         contigs.dt = unique(gr2dt(contig), by = c('qname'))
         readsc = bowtie_aln(reads = as.data.table(reads),
                             ref.seq = contigs.dt[, .(qname, seq)],
-                            outdir = paste0(outdir, "/contig"),
+                            outdir = normalizePath(file.path(outdir, "contig")),
                             verbose = verbose)
         readsc = as.data.table(readsc)
     } else {
