@@ -14,6 +14,9 @@ normal.aln.bam = system.file("extdata", "tests", "loosereads_1_normal", "aln.bam
 qnames.txt = system.file("extdata", "tests", "loosereads_1", "qnames.txt", package = "loosends")
 windows.bed = system.file("extdata", "tests", "loosereads_1", "windows.bed", package = "loosends")
 
+## bowtie directory
+bowtie.dir = system.file("extdata", "hg19_loosends", package = "loosends")
+
 ## loci for first test case
 this.le = parse.gr("20:60158837-")
 
@@ -70,6 +73,38 @@ test_that(desc = "check that reads and mates can be recovered", code = {
             ## make sure reads and mates are both there
             subset.bam.dt = as.data.table(subset.bam.gr)
             expect_true(all(subset.bam.dt[, .N, by = qname]$N == 2))
+        }
+    )
+})
+
+
+## test realignment
+test_that(desc = "check realignment with bowtie", code = {
+    suppressWarnings(
+        expr = {
+            realn.bam = realign_loosereads(bam = loosereads.bam,
+                                           ref = "human_g1k_v37_decoy",
+                                           bowtie = TRUE,
+                                           bowtie.dir = bowtie.dir,
+                                           outdir = "~/testing_tmp/bowtie",
+                                           verbose = FALSE)
+            expect_true(file.exists(realn.bam))
+            expect_true(file.info(realn.bam)$size > 0)
+            ## check that this matches with original realignment
+            aln.bam.grl = bamUtils::read.bam(aln.bam, all = TRUE,
+                                             isPaired = NA,
+                                             pairs.grl = TRUE,
+                                             isDuplicate = NA)
+            aln.bam.gr = unlist(aln.bam.grl)
+            realn.bam.grl = bamUtils::read.bam(realn.bam, all = TRUE,
+                                                isPaired = NA,
+                                                pairs.grl = TRUE,
+                                                isDuplicate = NA)
+            realn.bam.gr = unlist(realn.bam.grl)
+            ## gsub the qnames
+            mcols(realn.bam.gr)[, "qname"] = gsub("/[1|2]$", "", mcols(realn.bam.gr)[, "qname"])
+            expect_true(length(intersect(realn.bam.gr$qname, aln.bam.gr$qname)) > 0)
+            expect_true(length(realn.bam.gr %&% aln.bam.gr) > 0)
         }
     )
 })

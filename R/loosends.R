@@ -1573,6 +1573,10 @@ call_loose_end = function(li, ri,
             if (length(ralns.og)) {
                 ralns.og = ralns.og %Q% (!is.na(qname))
             }
+
+            ## garbage collect afterwards to avoid memory issues??
+            ## hack hack
+            gc()
         } else {
             ralns.og = concat.bwa[out.dt$seq]
             if (length(ralns.og)) {

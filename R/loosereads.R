@@ -25,6 +25,9 @@
 #' @param tbam (character) path to normal bam
 #' @param nbam (character) optional, path to normal bam
 #' @param ref (character) path to reference .fasta
+#' @param bowtie (logical) use bowtie for realignment?
+#' @param bowtie.ref (character) basename of bowtie references
+#' @param bowtie.dir (character) dirname of bowtie
 #' @param id (character) sample name
 #' @param outdir (character)
 #' @param pad (numeric)
@@ -35,6 +38,9 @@ loosereads_wrapper = function(ranges = GRanges(),
                               tbam = "/dev/null",
                               nbam = "/dev/null",
                               ref = "/dev/null",
+                              bowtie = FALSE,
+                              bowtie.ref = "/dev/null",
+                              bowtie.dir = "/dev/null",
                               id = "",
                               outdir = "./",
                               pad = 5000,
@@ -46,9 +52,19 @@ loosereads_wrapper = function(ranges = GRanges(),
                            qnames = tparams$qnames,
                            outdir = paste0(outdir, "/tumor"),
                            verbose = verbose)
-    taln = realign_loosereads(bam = tsub, ref = ref,
-                              outdir = paste0(outdir, "/tumor"),
-                              verbose = verbose)
+
+    if (bowtie) {
+        taln = realign_loosereads(bam = tsub,
+                                  ref = bowtie.ref,
+                                  bowtie = TRUE,
+                                  bowtie.dir = bowtie.dir,
+                                  outdir = paste0(outdir, "/tumor"),
+                                  verbose = verbose)
+    } else {
+        taln = realign_loosereads(bam = tsub, ref = ref,
+                                  outdir = paste0(outdir, "/tumor"),
+                                  verbose = verbose)
+    }
     
     if (check_file(nbam)) {
         nparams = grab_looseread_params(gr = ranges, bam = nbam, pad = pad, verbose = verbose)
@@ -57,9 +73,20 @@ loosereads_wrapper = function(ranges = GRanges(),
                                qnames = nparams$qnames,
                                outdir = paste0(outdir, "/normal"),
                                verbose = verbose)
-        naln = realign_loosereads(bam = nsub, ref = ref,
-                                  outdir = paste0(outdir, "/normal"),
-                                  verbose = verbose)
+
+        if (bowtie) {
+            naln = realign_loosereads(bam = nsub,
+                                      ref = bowtie.ref,
+                                      bowtie = TRUE,
+                                      bowtie.dir = bowtie.dir,
+                                      outdir = paste0(outdir, "/normal"),
+                                      verbose = verbose)
+        } else {
+            naln = realign_loosereads(bam = nsub, ref = ref,
+                                      outdir = paste0(outdir, "/normal"),
+                                      verbose = verbose)
+        }
+        
     } else {
         nsub = "/dev/null"
         naln = "/dev/null"
@@ -329,13 +356,21 @@ grab_loosereads = function(bam = NA_character_, ranges = GRanges(), qnames = cha
 #' Realign reads to selected reference
 #'
 #' @param bam (character) path to bam file
-#' @param ref (character) path to BWA indexed reference
+#' @param ref (character) path to BWA indexed reference. If running bowtie then this should be basename of the indexed reference file
+#' @param bowtie (logical) use Bowtie2 aligner? default FALSE
+#' @param bowtie.dir (logical) directory containing bowtie files
 #' @param outdir (character) output directory to dump results
 #' @param overwrite (logical) overwrite existing analysis
 #' @param verbose (logical)
 #'
 #' @return path to output bam file with realigned reads
-realign_loosereads = function(bam, ref = system.file('extdata', 'hg19_looseends', 'human_g1k_v37_decoy.fasta', package='loosends'), outdir = "./", verbose = FALSE) {
+realign_loosereads = function(bam,
+                              ref = system.file('extdata', 'hg19_looseends', 'human_g1k_v37_decoy.fasta', package='loosends'),
+                              bowtie = FALSE,
+                              bowtie.dir = system.file("extdata", "hg19_loosends", package = "loosends"),
+                              outdir = "./",
+                              overwrite = FALSE,
+                              verbose = FALSE) {
 
     if (!dir.exists(outdir)) {
         dir.create(outdir, recursive = TRUE)
@@ -370,16 +405,52 @@ realign_loosereads = function(bam, ref = system.file('extdata', 'hg19_looseends'
     aligned.fn = file.path(outdir, "aln.sam")
     final.fn = file.path(outdir, "aln.bam")
 
-    ## perform single end realignment
-    cmd = paste("bwa mem", ref, fastq.fn, ">", aligned.fn)
-    if (verbose) {
-        message("Realigning reads")
-        message(cmd)
-    }
-    sys.res = system(cmd)
-    if (sys.res) {
-        file.remove(aligned.fn)
-        stop("Error!")
+    if (bowtie) {
+
+        ## use BOWTIE!!!
+        if (verbose) {message("Using Bowtie2 for single end realignment")}
+
+        ## change to outdir
+        
+        currdir  = normalizePath(getwd())
+        fastq.fn = normalizePath(fastq.fn)
+        aligned.fn = file.path(currdir, "aln.sam")
+
+        if (verbose) {
+            message("Current directory: ", currdir)
+            message("Changing to bowtie directory for alignment: ", bowtie.dir)
+        }
+        setwd(bowtie.dir)
+
+        ## cmd = paste("module load bowtie2; bowtie2 --very-sensitive-local -x", ref,
+        ## bowtie2 should be runnable from command line but if not may need to load the module
+        cmd = paste("bowtie2 --very-sensitive-local -x", ref,
+                    "-U", fastq.fn,
+                    "-S", aligned.fn)
+        if (verbose) message("RUNNING: ", cmd)
+        sys.res = system(cmd)
+        if (sys.res) {
+            file.remove(aligned.fn)
+            stop("Error!")
+        }
+
+        if (verbose) {message("Changing back to output dir: ", currdir)}
+        setwd(currdir)
+    } else {
+
+        ## perform single end realignment
+        if (verbose) { message("Using BWA for single end realignment") }
+        
+        cmd = paste("bwa mem", ref, fastq.fn, ">", aligned.fn)
+        if (verbose) {
+            message("Realigning reads")
+            message(cmd)
+        }
+        sys.res = system(cmd)
+        if (sys.res) {
+            file.remove(aligned.fn)
+            stop("Error!")
+        }
     }
 
     cmd = paste("samtools view -Sb", aligned.fn, "|",
@@ -461,8 +532,13 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
     ## specifically we want alignment score here
     aln.grl = read.bam(bam = aln_bam, all = TRUE, pairs.grl = TRUE, tag="AS", isPaired = NA)
     aln.reads = as.data.table(unlist(aln.grl))
-    aln.reads[, R1 := bamflag(flag)[, "isFirstMateRead"]==1]
-    aln.reads[, R2 := bamflag(flag)[, "isSecondMateRead"]==1]
+
+    ## trim /1 and /2 on qnames
+    if (aln.reads[, .N]) {
+        aln.reads[, qname := gsub("/[1|2]$", "", qname)]
+        aln.reads[, R1 := bamflag(flag)[, "isFirstMateRead"]==1]
+        aln.reads[, R2 := bamflag(flag)[, "isSecondMateRead"]==1]
+    }
     
     ## recast reads as data table
     reads.dt = as.data.table(reads)
