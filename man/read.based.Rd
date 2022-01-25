@@ -8,9 +8,9 @@ read.based(
   li,
   ri,
   pad = NULL,
-  ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"),
-  ref_obj = NULL,
-  return.contigs = FALSE
+  human = NULL,
+  return.contigs = FALSE,
+  mapq.thresh = 60
 )
 }
 \arguments{
@@ -20,9 +20,7 @@ read.based(
 
 \item{pad}{optional, padding around loose end li to search for discordant reads, default=1e3}
 
-\item{ref_dir}{optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'}
-
-\item{ref_obj}{optional, list of BWA objects built from ref_dir fastas, names must match expected "human" "rep" "polyA" "microbe" (only "human" is used), default=NULL}
+\item{human}{(human BWA)}
 
 \item{return.contigs}{return contigs if TRUE, otherwise just return}
 }

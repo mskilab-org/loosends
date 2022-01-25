@@ -8,9 +8,13 @@ call_loose_end_wrapper(
   id = "",
   le.dt = data.table(),
   reads.dt = data.table(),
-  ref_obj = NULL,
+  concat.bwa = NULL,
+  human.bwa = NULL,
+  concat.fn = NA_character_,
   pad = 5000,
   mix.tn = TRUE,
+  minimap = FALSE,
+  outdir = "./",
   max.reads = 5000,
   verbose = FALSE
 )
@@ -20,11 +24,15 @@ call_loose_end_wrapper(
 
 \item{reads.dt}{(from loosereads)}
 
-\item{ref_obj}{(reference object)}
+\item{concat.bwa}{(BWA from RSeqLib) concatenated fasta}
+
+\item{human.bwa}{(BWA from RSeqLib)}
 
 \item{pad}{(window for local assembly)}
 
-\item{mix.tn}{(logical)}
+\item{mix.tn}{(logical) mix tumor and normal reads? default TRUE}
+
+\item{minimap}{(logical) default FALSE}
 
 \item{max.reads}{(numeric) max reads per loose end before downsampling (default 5000)}
 

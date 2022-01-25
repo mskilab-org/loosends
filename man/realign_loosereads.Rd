@@ -8,20 +8,27 @@ realign_loosereads(
   bam,
   ref = system.file("extdata", "hg19_looseends", "human_g1k_v37_decoy.fasta", package =
     "loosends"),
+  bowtie = FALSE,
+  bowtie.dir = system.file("extdata", "hg19_loosends", package = "loosends"),
   outdir = "./",
+  overwrite = FALSE,
   verbose = FALSE
 )
 }
 \arguments{
 \item{bam}{(character) path to bam file}
 
-\item{ref}{(character) path to BWA indexed reference}
+\item{ref}{(character) path to BWA indexed reference. If running bowtie then this should be basename of the indexed reference file}
+
+\item{bowtie}{(logical) use Bowtie2 aligner? default FALSE}
+
+\item{bowtie.dir}{(logical) directory containing bowtie files}
 
 \item{outdir}{(character) output directory to dump results}
 
-\item{verbose}{(logical)}
-
 \item{overwrite}{(logical) overwrite existing analysis}
+
+\item{verbose}{(logical)}
 }
 \value{
 path to output bam file with realigned reads

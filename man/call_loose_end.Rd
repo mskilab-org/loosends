@@ -7,10 +7,15 @@
 call_loose_end(
   li,
   ri,
-  ref_obj = NULL,
-  pad = 1000,
+  concat.bwa = NULL,
+  human.bwa = NULL,
+ 
+    concat.fn = "~/git/loosends/inst/extdata/hg19_loosends/concatenated_references_deduped.fasta",
+  pad = 5000,
   mix.tn = TRUE,
   max.reads = 2500,
+  outdir = "./",
+  minimap = FALSE,
   verbose = FALSE
 )
 }
@@ -19,7 +24,9 @@ call_loose_end(
 
 \item{ri}{(data.table) loose reads table prepped (e.g. from prep_loose_reads)}
 
-\item{ref_obj}{(character) or a list of BWA indices, if ref_dir not provided}
+\item{concat.bwa}{(BWA object from RSeqLib)}
+
+\item{human.bwa}{(BWA object from RSeqLib)}
 
 \item{pad}{(numeric) window size for local assembly, default 1 kbp}
 

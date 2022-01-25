@@ -9,6 +9,9 @@ loosereads_wrapper(
   tbam = "/dev/null",
   nbam = "/dev/null",
   ref = "/dev/null",
+  bowtie = FALSE,
+  bowtie.ref = "/dev/null",
+  bowtie.dir = "/dev/null",
   id = "",
   outdir = "./",
   pad = 5000,
@@ -23,6 +26,12 @@ loosereads_wrapper(
 \item{nbam}{(character) optional, path to normal bam}
 
 \item{ref}{(character) path to reference .fasta}
+
+\item{bowtie}{(logical) use bowtie for realignment?}
+
+\item{bowtie.ref}{(character) basename of bowtie references}
+
+\item{bowtie.dir}{(character) dirname of bowtie}
 
 \item{id}{(character) sample name}
 

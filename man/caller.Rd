@@ -10,8 +10,7 @@ caller(
   insert = 750,
   pad = NULL,
   uannot = NULL,
-  ref_dir = system.file("extdata", "hg19_looseends", package = "loosends"),
-  ref_obj = NULL,
+  human = NULL,
   return.contigs = FALSE
 )
 }
@@ -26,11 +25,11 @@ caller(
 
 \item{uannot}{optional, GRanges of unmappable annotations, default bin/101.unmappable.annotations.rds}
 
+\item{return.contigs}{(logical)}
+
 \item{ref_dir}{optional, path to directory of unzipped reference tarball, default assumes 'package/extdata/hg19_looseends'}
 
 \item{ref_obj}{optional, list of BWA objects built from ref_dir fastas, names must match expected "human" "rep" "polyA" "microbe" (only "human" is used), default=NULL}
-
-\item{return.contigs}{(logical)}
 }
 \description{
 parses contig alignments to assign loose end to category and describe repeat types

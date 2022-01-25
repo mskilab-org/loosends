@@ -8,6 +8,7 @@ read_support(
   le.dt = data.table(),
   reads.dt = data.table(),
   contigs.dt = data.table(),
+  calns = data.table(),
   fasta = "/dev/null",
   ref.bwa = NULL,
   chimeric = TRUE,
@@ -17,6 +18,8 @@ read_support(
   isize.diff = 1000,
   seed.pad = 150,
   all.reads = FALSE,
+  bowtie = FALSE,
+  outdir = "./",
   verbose = FALSE,
   ...
 )
@@ -28,9 +31,15 @@ read_support(
 
 \item{contigs.dt}{(data.table) data.table with colnames track, peak, qname. all qnames should be identical.}
 
+\item{calns}{(data.table) contig alignments, coercible to GRanges}
+
 \item{seed.pad}{(numeric) pad around seed for getting supporting reads}
 
 \item{all.reads}{(logical) return all input reads or just the chunks supporing the contig? (default FALSE)}
+
+\item{bowtie}{(logical) use bowtie to align reads? if TRUE, fasta must be provided}
+
+\item{outdir}{(character) output directory for temporary files}
 
 \item{verbose}{(logical)}
 

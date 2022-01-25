@@ -11,6 +11,9 @@ read_support_wrapper(
   id = "",
   pad = 5000,
   ref.bwa = NULL,
+  ref.fasta = NULL,
+  bowtie = FALSE,
+  outdir = ".",
   verbose = FALSE
 )
 }
@@ -26,6 +29,12 @@ read_support_wrapper(
 \item{pad}{(numeric) window for getting supporting reads}
 
 \item{ref.bwa}{(human output from grab_ref_obj)}
+
+\item{ref.fasta}{(character) path to fasta if using bowtie}
+
+\item{bowtie}{(logical) default FALSE}
+
+\item{outdir}{(character) dirname for temporary files}
 
 \item{verbose}{(logical)}
 }

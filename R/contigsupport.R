@@ -149,6 +149,7 @@ read_support_wrapper = function(le.dt = data.table(),
 #' @param le.dt (data.table) (single row output from process_loose_ends)
 #' @param reads.dt (data.table) data.table of reads coercible to GRanges
 #' @param contigs.dt (data.table) data.table with colnames track, peak, qname. all qnames should be identical.
+#' @param calns (data.table) contig alignments, coercible to GRanges
 #' @param seed.pad (numeric) pad around seed for getting supporting reads
 #' @param all.reads (logical) return all input reads or just the chunks supporing the contig? (default FALSE)
 #' @param bowtie (logical) use bowtie to align reads? if TRUE, fasta must be provided
@@ -162,6 +163,7 @@ read_support_wrapper = function(le.dt = data.table(),
 read_support = function(le.dt = data.table(),
                         reads.dt = data.table(),
                         contigs.dt = data.table(),
+                        calns = data.table(), ## aligned contigs, overrides contigs.dt
                         fasta = "/dev/null",
                         ref.bwa = NULL,
                         chimeric = TRUE,
@@ -186,13 +188,13 @@ read_support = function(le.dt = data.table(),
         stop("Empty reads.dt")
     }
     
-    if (!nrow(contigs.dt)) {
-        stop("Either contigs.dt or junction must be supplied")
+    if ((!nrow(contigs.dt)) & (!nrow(calns))) {
+        stop("Either contigs.dt or calns must be supplied")
     }
 
-    if (length(unique(contigs.dt$qname)) > 1) {
-        stop("some contigs have different qnames")
-    }
+    ## if (length(unique(contigs.dt$qname)) > 1) {
+    ##     stop("some contigs have different qnames")
+    ## }
 
     if (bowtie) {
         ref.bwa = fasta
@@ -229,32 +231,44 @@ read_support = function(le.dt = data.table(),
     if (verbose) {
         message("Grabbing reads overlapping contig peak and their mates")
     }
-    win = contigs.dt[1, GRanges(peak)]
+
+    if (nrow(contigs.dt)) {
+        win = contigs.dt[1, GRanges(peak)]
+    } else {
+        win = parse.gr(unique(calns[, seed]))
+    }
     seed = reads.dt[dt2gr(reads.dt) %^% (win + seed.pad)] ## which qnames overlap the peak window?
-    strand(win) = ifelse(grepl("for", contigs.dt[1]$track), "+", "-")
+    ## strand(win) = ifelse(grepl("for", contigs.dt[1]$track), "+", "-")
     window.reads.dt = reads.dt[qname %in% seed$qname] ## which reads correspond with that qname?
 
     if (verbose) {
         message("Building contig gChain")
     }
 
-    sn = unlist(lapply(strsplit(contigs.dt[, y], ":"), function(x) {x[[1]]}))
-    strand = sapply(contigs.dt[, y], function(x) {substring(x, first = nchar(x), last = nchar(x))})
-    start = gsub("-[0-9]+.*$", "", gsub(".+:", "", contigs.dt[, y]))
-    end = gsub("[-|\\+]+$", "", gsub(".+:[0-9]+-", "", contigs.dt[, y]))
-    cg.contig = gChain::cgChain(GRanges(seqnames = sn,
-                                        ranges = IRanges(start = as.numeric(start),
-                                                         end = as.numeric(end)),
-                                        strand = strand,
-                                        cigar = contigs.dt[, cigar],
-                                        qname = contigs.dt[, qname]))
+    if (nrow(contigs.dt)) {
+        sn = unlist(lapply(strsplit(contigs.dt[, y], ":"), function(x) {x[[1]]}))
+        strand = sapply(contigs.dt[, y], function(x) {substring(x, first = nchar(x), last = nchar(x))})
+        start = gsub("-[0-9]+.*$", "", gsub(".+:", "", contigs.dt[, y]))
+        end = gsub("[-|\\+]+$", "", gsub(".+:[0-9]+-", "", contigs.dt[, y]))
+        cg.contig = gChain::cgChain(GRanges(seqnames = sn,
+                                            ranges = IRanges(start = as.numeric(start),
+                                                             end = as.numeric(end)),
+                                            strand = strand,
+                                            cigar = contigs.dt[, cigar],
+                                            qname = contigs.dt[, qname]))
+        tigs = contigs.dt
+    } else {
+        cg.contig = gChain::cgChain(dt2gr(calns))
+        tigs = calns
+    }
 
     if (verbose) {
         message("Starting contig support")
     }
 
+    ## TODO: harmonize so that a BWA object can be passed in for contig sequence directly
     rc = contig.support(dt2gr(window.reads.dt),
-                        contigs.dt,
+                        contig = tigs, ##contigs.dt,
                         cg.contig = cg.contig,
                         ref = ref.bwa,## refseq,
                         chimeric = chimeric,
