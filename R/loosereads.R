@@ -31,6 +31,7 @@
 #' @param id (character) sample name
 #' @param outdir (character)
 #' @param pad (numeric)
+#' @param mask (character) path to GRanges mask
 #' @param verbose (logical)
 #'
 #' @return data.table of reads + mates
@@ -44,9 +45,10 @@ loosereads_wrapper = function(ranges = GRanges(),
                               id = "",
                               outdir = "./",
                               pad = 5000,
+                              mask = "/dev/null",
                               verbose = FALSE) {
 
-    tparams = grab_looseread_params(gr = ranges, bam = tbam, pad = pad, verbose = verbose)
+    tparams = grab_looseread_params(gr = ranges, bam = tbam, pad = pad, mask = mask, verbose = verbose)
     tsub = grab_loosereads(bam = tbam,
                            ranges = tparams$ranges,
                            qnames = tparams$qnames,
@@ -67,7 +69,7 @@ loosereads_wrapper = function(ranges = GRanges(),
     }
     
     if (check_file(nbam)) {
-        nparams = grab_looseread_params(gr = ranges, bam = nbam, pad = pad, verbose = verbose)
+        nparams = grab_looseread_params(gr = ranges, bam = nbam, pad = pad, mask = mask, verbose = verbose)
         nsub = grab_loosereads(bam = nbam,
                                ranges = nparams$ranges,
                                qnames = nparams$qnames,
@@ -159,6 +161,7 @@ has_chr = function(bam) {
 #'
 #' @param gr (GRanges) stranded GRanges representing loose ends
 #' @param bam (character) path to bam file
+#' @param mask (character) path to GRanges to excluded reads
 #' @param pad (numeric) pad around loose ends
 #' @param mate_pad (numeric) pad around mate windows
 #' @param verbose (logical)
@@ -168,6 +171,7 @@ has_chr = function(bam) {
 #' - $qnames (character vector of loose read qnames)
 grab_looseread_params = function(gr = GRanges(),
                                  bam = character(),
+                                 mask = "/dev/null",
                                  pad = 5000,
                                  mate_pad = 150,
                                  verbose = FALSE) {
@@ -246,6 +250,20 @@ grab_looseread_params = function(gr = GRanges(),
     }
 
     windows = trim(reduce(grbind(loose.gr, mate.wins + mate_pad, spl.wins + mate_pad)))
+
+    if (check_file(mask)) {
+        if (verbose) { message("Reading mask: ", mask) }
+        mask.gr = readRDS(mask)
+        if (!inherits(mask.gr, "GRanges")) {
+            stop("Mask must be GRanges")
+        }
+        if (length(mask.gr) & length(windows)) {
+            if (verbose) { message("Total width of windows before removing mask: ", sum(width(windows))) }
+            windows.dj = disjoin(grbind(gr.stripstrand(windows), gr.stripstrand(mask.gr)))
+            windows = windows.dj %Q% (!(windows.dj %^% mask.gr))
+            if (verbose) { message("Total width of windows after removing mask: ", sum(width(windows))) }
+        }
+    }
     qnames = unique(reads[, qname])
 
     return(list(ranges = windows, qnames = qnames))

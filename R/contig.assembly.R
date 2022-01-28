@@ -48,8 +48,19 @@ label_contigs = function(le, bps, mapq.gr, unmappable.gr,
                          mappability.thresh = 0.5,
                          specificity.thresh = 0) {
 
+    ## identify the proximal category of the loose end
+    ## in addition, consider the mappability of the actual loose end
+    le.strongly.unmappable = dt2gr(le) %^% unmappable.gr
+    if (dt2gr(le) %^% mapq.gr) {
+        le.mappable = (dt2gr(le) %$% mapq.gr)$mapq0.frac <= mappability.thresh
+    } else {
+        le.mappable = FALSE
+    }
+
+    pcat = ifelse(le.mappable, "M", ifelse(le.strongly.unmappable, "S", "W"))
+
     if (!bps[, .N]) {
-        call = copy(le)[, ":="(category = "MYS", proximal = NA, distal = NA, nonspecific = NA,
+        call = copy(le)[, ":="(category = "MYS", proximal = pcat, distal = NA, nonspecific = NA,
                                c_telomere = FALSE, g_telomere = FALSE)]
         return(list(call = call, breakpoints = bps))
     }
@@ -74,7 +85,7 @@ label_contigs = function(le, bps, mapq.gr, unmappable.gr,
 
     ## if there are zero specific contigs, then category is MYS!
     if (!bps[(specific), .N]) {
-        call = copy(le)[, ":="(category = "MYS", proximal = NA, distal = NA, nonspecific = TRUE,
+        call = copy(le)[, ":="(category = "MYS", proximal = pcat, distal = NA, nonspecific = TRUE,
                                c_telomere = c.telo, g_telomere = g.telo)]
         return(list(call = call, breakpoints = bps))
     }
@@ -107,7 +118,7 @@ label_contigs = function(le, bps, mapq.gr, unmappable.gr,
     bps[, distal.summary := ifelse(any(distal.category == "M", na.rm = TRUE), "M",
                             ifelse(all(distal.category == "S", na.rm = TRUE), "S", "W"))]
 
-    proximal = bps[, proximal.summary][1]
+    proximal = pcat##bps[, proximal.summary][1]
     distal = bps[, distal.summary][1]
     if (proximal == "M") {
         if (distal == "M") {
@@ -210,7 +221,7 @@ check_distal_only_contig_support = function(calns, reads.dt, ref.pad = 5e3, seed
     win = parse.gr(unique(calns[, seed]))
 
     if (verbose) { message("Grabbing reads near peak and their mates") }
-    seed.qnames = reads.dt[dt2gr(reads.dt) %^% (win + seed.pad), qname]
+    seed.qnames = reads.dt[dt2gr(reads.dt) %^^% (win + seed.pad), qname]
     window.reads.dt = reads.dt[qname %in% seed.qnames] ## which reads correspond with that qname?
     window.reads.gr = dt2gr(window.reads.dt)
 
@@ -256,7 +267,7 @@ check_split_contig_support = function(calns, reads.dt, ref, seed.pad = 0, verbos
     win = parse.gr(unique(calns[, seed]))
 
     if (verbose) { message("Grabbing reads near peak and their mates") }
-    seed.qnames = reads.dt[dt2gr(reads.dt) %^% (win + seed.pad), qname]
+    seed.qnames = reads.dt[dt2gr(reads.dt) %^^% (win + seed.pad), qname]
     window.reads.dt = reads.dt[qname %in% seed.qnames] ## which reads correspond with that qname?
     window.reads.gr = dt2gr(window.reads.dt)
 
@@ -303,6 +314,7 @@ grab_contig_breakends_wrapper = function(calns, name.field = "name", verbose = F
     })
 
     bnds = rbindlist(bnds, fill = TRUE, use.names = TRUE)
+
     return(bnds)
 }
 
@@ -318,7 +330,6 @@ grab_contig_breakends_wrapper = function(calns, name.field = "name", verbose = F
 #' Also assumes that the alignment is split.
 #'
 #' If more than one contig is supplied, throws an exception.
-#' If the alignment is not split, returns an empty data table with a warning.
 #' 
 #' @param calns (GRanges) contig alignment
 #' @param seed (GRanges) seed region of the contig
@@ -326,7 +337,14 @@ grab_contig_breakends_wrapper = function(calns, name.field = "name", verbose = F
 #' @param seed.pad (numeric) bp pad to be considered lying outside peak (default 1e3)
 #' @param verbose (logical)
 #'
-#' @return data.table with seqnames, start, end, strand, and seed.side (indicating breakpoint)
+#' @return data.table with seqnames, start, end, strand, and a few metadata columns:
+#' - proximal (logical) proximal vs. distal breakends?
+#' - proximal.first (logical) proximal part of the contig is in the first part of the contig
+#' - seed.only (logical) contig is seed only
+#' - mate.only (logical) conig is mate only
+#' - c_type (character)
+#' - c_spec (character)
+#' - cigar (character)
 #' strand is in breakend orientation (so if there were a junction it would be consistent with the junction)
 grab_contig_breakends = function(calns, seed, reduce.pad = 20, seed.pad = 1e3, verbose = FALSE) {
 
@@ -343,22 +361,10 @@ grab_contig_breakends = function(calns, seed, reduce.pad = 20, seed.pad = 1e3, v
     }
 
     ## extract some metadata...
-    ## TODO: FORMALIZE EXPECTED COLUMNS IN CALNS
     fbi = FALSE
     if (!is.null(calns$fbi)) {
         fbi = calns[, fbi][1]
-    }
-    unmapped.bases = FALSE
-    if (!is.null(calns$unmapped.bases)) {
-        unmapped.bases = calns[, unmapped.bases][1]
-    }
-    query.c.telomere = FALSE
-    if (!is.null(calns$query_c_telomere)) {
-        query.c.telomere = any(calns[, query_c_telomere], na.rm = TRUE)
-    }
-    query.g.telomere = FALSE
-    if (!is.null(calns$query_g_telomere)) {
-        query.g.telomere = any(calns[, query_g_telomere], na.rm = TRUE)
+        fbi = ifelse(is.na(fbi), FALSE, fbi)
     }
 
     ## create cgChain for this contig
@@ -385,58 +391,55 @@ grab_contig_breakends = function(calns, seed, reduce.pad = 20, seed.pad = 1e3, v
     if (!any(mcols(y)[, "peak"])) {
         y.red = reduce(y + reduce.pad) - reduce.pad
         res = as.data.table(gr.start(y.red))[, ":="(proximal = FALSE, proximal.first = NA,
-                                                    seed.only = FALSE, mate.only = TRUE,
-                                                    query_c_telomere = query.c.telomere,
-                                                    query_g_telomere = query.g.telomere)]
-        return(res)
-    }
-
-    ## if we have a proximal-only contig (presumably with unmapped bases)
-    if (all(mcols(y)[, "peak"])) {
+                                                    seed.only = FALSE, mate.only = TRUE)]
+    } else if (all(mcols(y)[, "peak"])) {
         y.red = reduce(y + reduce.pad) - reduce.pad
         res = as.data.table(gr.start(y.red))[, ":="(proximal = TRUE, proximal.first = NA,
-                                                    seed.only = TRUE, mate.only = FALSE,
-                                                    query_c_telomere = query.c.telomere,
-                                                    query_g_telomere = query.g.telomere)]
-        return(res)
-    }
-
-    ## reduce the peak and non-peak regions of the alignment
-    ## after adding a pad
-    y.peak = reduce((y %Q% (peak)) + reduce.pad) - reduce.pad
-    y.nonpeak = reduce((y %Q% (!peak)) + reduce.pad) - reduce.pad
-
-    ## check whether the peak side is the front or back of the contig
-    x.red = reduce((x %Q% (peak)) + reduce.pad) - reduce.pad
-
-    if (start(x.red) < 20) {
-        ## if the peak side is at the front of the contig
-        ## the proximal bp is at the end of the peak region
-        ## and the strand must be flipped
-        proximal.bp = gr.flipstrand(gr.end(y.peak))
-        ## the distal bp is at the start of the non peak region
-        distal.bp = gr.start(y.nonpeak)
-        proximal.start = TRUE
+                                                    seed.only = TRUE, mate.only = FALSE)]
     } else {
-        ## otherwise proximal is the start of the peak region
-        proximal.bp = gr.start(y.peak)
-        ## and distal is the end of the non-peak region with strand flipped
-        distal.bp = gr.flipstrand(gr.end(y.nonpeak))
-        proximal.start = FALSE
+
+        ## reduce the peak and non-peak regions of the alignment
+        ## after adding a pad
+        y.peak = reduce((y %Q% (peak)) + reduce.pad) - reduce.pad
+        y.nonpeak = reduce((y %Q% (!peak)) + reduce.pad) - reduce.pad
+
+        ## check whether the peak side is the front or back of the contig
+        x.red = reduce((x %Q% (peak)) + reduce.pad) - reduce.pad
+
+        if (start(x.red) < 20) {
+            ## if the peak side is at the front of the contig
+            ## the proximal bp is at the end of the peak region
+            ## and the strand must be flipped
+            proximal.bp = gr.flipstrand(gr.end(y.peak))
+            ## the distal bp is at the start of the non peak region
+            distal.bp = gr.start(y.nonpeak)
+            proximal.start = TRUE
+        } else {
+            ## otherwise proximal is the start of the peak region
+            proximal.bp = gr.start(y.peak)
+            ## and distal is the end of the non-peak region with strand flipped
+            distal.bp = gr.flipstrand(gr.end(y.nonpeak))
+            proximal.start = FALSE
+        }
+
+        res = rbind(as.data.table(proximal.bp)[, ":="(proximal = TRUE,
+                                                      proximal.first = proximal.start,
+                                                      seed.only = FALSE,
+                                                      mate.only = FALSE)],
+                    as.data.table(distal.bp)[, ":="(proximal = FALSE,
+                                                    proximal.first = proximal.start,
+                                                    seed.only = FALSE,
+                                                    mate.only = FALSE)])
     }
 
-    res = rbind(as.data.table(proximal.bp)[, ":="(proximal = TRUE,
-                                                  proximal.first = proximal.start,
-                                                  seed.only = FALSE,
-                                                  mate.only = FALSE,
-                                                  query_c_telomere = query.c.telomere,
-                                                  query_g_telomere = query.g.telomere)],
-                as.data.table(distal.bp)[, ":="(proximal = FALSE,
-                                                proximal.first = proximal.start,
-                                                seed.only = FALSE,
-                                                mate.only = FALSE,
-                                                query_c_telomere = query.c.telomere,
-                                                query_g_telomere = query.g.telomere)])
+    ## add back some postentially useful metadata
+    if (res[, .N]) {
+        extra.cols = mcols( dt2gr(res)[, c()] %$% dt2gr(calns)[, c("c_type", "c_spec", "cigar")] )
+        res[, c_type := extra.cols$c_type]
+        res[, c_spec := extra.cols$c_spec]
+        res[, cigar := extra.cols$cigar]
+        res[, seed := gr.string(seed)]
+    }
     return(res)
 }
 
@@ -461,12 +464,14 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
     all.contigs = lapply(seq_along(tiles),
                   function(ix) {
                       if (verbose) {message("Starting analysis for window: ", ix, " of ", length(tiles))}
-                      seed.frame.dt = grab_seed_frame(reads.dt, seed.gr = tiles[ix])
+                      seed.frame.dt = grab_seed_frame(reads.dt,
+                                                      seed.gr = tiles[ix],
+                                                      seq.field = "reading.frame")
                       if (seed.frame.dt[, .N]) {
                           ctigs = build_contigs(seed.frame.dt, verbose = verbose)
                           if (length(ctigs)) {
                               if (verbose) { message("Aligning contigs to reference") }
-                              aln.ctigs = align_contigs(ctigs, ref, verbose = verbose)
+                              aln.ctigs = align_contigs(ctigs, ref, verbose = verbose, keep.unaligned = FALSE)
                               ## aln.ctigs = ref[ctigs]
                               if (verbose) { message("Filtering contigs based on structure") }
                               qc.ctigs = qc_contigs(aln.ctigs, tiles[ix])
@@ -502,13 +507,17 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
 #' @param tigs (character)
 #' @param ref (RSeqLib::BWA)
 #' @param refseq.fn (character) path to seqnames annotation file (included)
-#' @param remove.decoy (logical) exclude alignment to decoy sequences? default FALSE
+#' @param primary.only (logical) default TRUE
+#' @param remove.decoy (logical) exclude alignment to decoy sequences? default TRUE
+#' @param keep.unaligned (logical) keep unaligend contigs?? default FALSE
 #' @param verbose (logical) default FALSE
 #'
-#' @return GRanges with contig alignment and metadata fields c_type and c_spec
+#' @return data.table with contig alignment and metadata fields c_type and c_spec
 align_contigs = function(tigs, ref,
                          refseq.fn = system.file("extdata", "reference.sequences.rds", package = "loosends"),
-                         remove.decoy = FALSE,
+                         primary.only = TRUE,
+                         remove.decoy = TRUE,
+                         keep.unaligned = FALSE,
                          verbose = FALSE) {
 
     refseq.dt = readRDS(refseq.fn)
@@ -521,28 +530,63 @@ align_contigs = function(tigs, ref,
         mcols(aln.tigs)[, "c_type"] = refseq.dt[as.character(seqnames(aln.tigs)), c_type]
         mcols(aln.tigs)[, "c_spec"] = refseq.dt[as.character(seqnames(aln.tigs)), c_spec]
         mcols(aln.tigs)[, "query.seq"] = tigs[as.numeric(mcols(aln.tigs)[, "qname"])]
-    }
-
-    ## parse sequences for C/G telomeres
-    if (length(aln.tigs)) {
 
         if (verbose) { message("Searching alignments for C and G telomeres") }
-        
-        ## does the aligned chunk specifically have a C/G telomere?
+        ## ## does the aligned chunk specifically have a C/G telomere?
         mcols(aln.tigs)[, "aln_c_telomere"] = find_telomeres(seq = mcols(aln.tigs)[, "seq"], gorc = "c")
         mcols(aln.tigs)[, "aln_g_telomere"] = find_telomeres(seq = mcols(aln.tigs)[, "seq"], gorc = "g")
-        ## does the query overall have a C/G telomere?
-        mcols(aln.tigs)[, "query_c_telomere"] = find_telomeres(seq = mcols(aln.tigs)[, "query.seq"], gorc = "c")
-        mcols(aln.tigs)[, "query_g_telomere"] = find_telomeres(seq = mcols(aln.tigs)[, "query.seq"], gorc = "g")
+        ## ## does the query overall have a C/G telomere?
+        ## mcols(aln.tigs)[, "query_c_telomere"] = find_telomeres(seq = mcols(aln.tigs)[, "query.seq"], gorc = "c")
+        ## mcols(aln.tigs)[, "query_g_telomere"] = find_telomeres(seq = mcols(aln.tigs)[, "query.seq"], gorc = "g")
+        
+        
     }
 
-    if (length(aln.tigs)) {
+    ## convert to data table
+    aln.tigs.dt = as.data.table(aln.tigs)
+
+    ## merge with non-aligned contigs
+    if (keep.unaligned) {
+        if (verbose) {message("Checking for unaligned contigs")}
+        unaln.tigs = setdiff(1:length(tigs), aln.tigs.dt[, as.numeric(qname)])
+        if (length(unaln.tigs)) {
+            unaln.tigs.dt = data.table(seqnames = NA_character_,
+                                       start = 1,
+                                       end = 0,
+                                       cigar = NA_character_,
+                                       seq = NA_character_,
+                                       query.seq = tigs[unaln.tigs],
+                                       qwidth = nchar(tigs[unaln.tigs]),
+                                       qname = unaln.tigs)
+            aln.tigs.dt = rbind(aln.tigs.dt, unaln.tigs.dt, use.names = TRUE, fill = TRUE)
+        }
+        if (verbose) {message("Number of unaligned contigs: ", length(unaln.tigs))}
+    }
+
+    if (aln.tigs.dt[, .N]) {
+
+        if (verbose) { message("Searching query sequences for C and G telomeres") }
+        
+        aln.tigs.dt[, query_c_telomere := find_telomeres(seq = mcols(aln.tigs)[, "query.seq"], gorc = "c")]
+        aln.tigs.dt[, query_g_telomere := find_telomeres(seq = mcols(aln.tigs)[, "query.seq"], gorc = "g")]
+    }
+
+    if (aln.tigs.dt[, .N]) {
+        if (verbose) { message("Annotating primary alignments") }
+        aln.tigs.dt[, primary := bamUtils::bamflag(flag)[, "isNotPrimaryRead"] == 0]
+        if (primary.only) {
+            aln.tigs.dt = aln.tigs.dt[(primary),]
+        }
+        if (verbose) {
+            message("Checking for alignments to decoy sequences")
+        }
+        aln.tigs.dt[, decoy := as.character(seqnames) %in% refseq.dt[c_type == "decoy", seqnames]]
         if (remove.decoy) {
-            aln.tigs = aln.tigs %Q% (!(as.character(seqnames(aln.tigs)) %in% refseq.dt[c_type == "decoy", seqnames]))
+            aln.tigs.dt = aln.tigs.dt[(!decoy)]
         }
     }
-    
-    return(aln.tigs)
+
+    return(aln.tigs.dt)
 }
 
 #' @name grab_seed_frame
@@ -566,12 +610,12 @@ grab_seed_frame = function(reads.dt, seed.gr, seq.field = "reading.frame", max.n
     }
 
     ## grab qnames overlapping target window
-    ## seed.reads = dt2gr(reads.dt[, .(seqnames, start, end, strand)]) %^^% seed.gr
-    seed.reads = dt2gr(reads.dt[, .(seqnames, start, end, strand)]) %^% seed.gr
+    seed.reads = dt2gr(reads.dt[, .(seqnames, start, end, strand)]) %^^% seed.gr
+    ## seed.reads = dt2gr(reads.dt[, .(seqnames, start, end, strand)]) %^% seed.gr
     seed.qnames = reads.dt[which(seed.reads), qname]
     valid.reads.dt = reads.dt[qname %in% seed.qnames,]
-    ## valid.reads.dt[, seed := dt2gr(valid.reads.dt) %^^% seed.gr]
-    valid.reads.dt[, seed := dt2gr(valid.reads.dt) %^% seed.gr]
+    valid.reads.dt[, seed := dt2gr(valid.reads.dt) %^^% seed.gr]
+    ## valid.reads.dt[, seed := dt2gr(valid.reads.dt) %^% seed.gr]
 
     ## arbitrarily choose a read as anchor if the qname is duplicated
     ## this occurs for foldback-inversions
@@ -583,10 +627,11 @@ grab_seed_frame = function(reads.dt, seed.gr, seq.field = "reading.frame", max.n
 
     ## for non-seed reads, reverse complement
     valid.reads.dt[, rc.reading.frame := as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(get(seq.field))))]
+    valid.reads.dt[, seed.frame := ifelse(seed, get(seq.field), rc.reading.frame)]
     ## valid.reads.dt[, seed.frame := ifelse(seed , get(seq.field), rc.reading.frame)]
-    valid.reads.dt[, seed.frame := ifelse((seed & stranded.seed) | ((!seed) & (!stranded.seed)) ,
-                                          get(seq.field),
-                                          rc.reading.frame)]
+    ## valid.reads.dt[, seed.frame := ifelse((seed & stranded.seed) | ((!seed) & (!stranded.seed)) ,
+    ##                                       get(seq.field),
+    ##                                       rc.reading.frame)]
 
     ## get rid of anything with too many N's or zero length strings
     valid.reads.dt = valid.reads.dt[stringr::str_count(get(seq.field), "N") <= max.n & nchar(get(seq.field)) > 0,]
@@ -605,10 +650,11 @@ grab_seed_frame = function(reads.dt, seed.gr, seq.field = "reading.frame", max.n
 #'
 #' @param reads.dt (must have column seed.frame)
 #' @param col (column name containing sequences for alignment) e.g. seed.frame
+#' @param qcol (column name for base quality, default 'qual')
 #' @param max.iter (numeric) max number of iterations for assembly
 #' @param max.unaln (numeric) max number of unaligned reads after assembly
 #' @param verbose (logical) default FALSE
-build_contigs = function(reads.dt, col = "seed.frame", max.iter = 3, max.unaln = 3, verbose = FALSE) {
+build_contigs = function(reads.dt, col = "seed.frame", qcol = "qual", max.iter = 3, max.unaln = 3, verbose = FALSE) {
 
     ## get rid of NA reads
     reads.dt = reads.dt[!is.na(get(col)),]
@@ -626,13 +672,15 @@ build_contigs = function(reads.dt, col = "seed.frame", max.iter = 3, max.unaln =
     if (verbose) {
         message("Trying assembly with all reads")
     }
-    tigs = RSeqLib::Fermi(reads = reads.dt[, get(col)], assemble = TRUE)
+    tigs = RSeqLib::Fermi(reads = reads.dt[, get(col)], qual = reads.dt[, get(qcol)], assemble = TRUE)
     all.tigs = RSeqLib::contigs(tigs)
 
     ## assemble discordant pairs only
     if (reads.dt[(!concord), .N] > 4) {
         if (verbose) {message("Trying assembly with only discordant reads")}
-        discordant.tigs = RSeqLib::Fermi(reads = reads.dt[(!concord), get(col)], assemble = TRUE)
+        discordant.tigs = RSeqLib::Fermi(reads = reads.dt[(!concord), get(col)],
+                                         qual = reads.dt[(!concord), get(qcol)],
+                                         assemble = TRUE)
         all.tigs = c(all.tigs, RSeqLib::contigs(discordant.tigs))
     }
 
@@ -640,7 +688,9 @@ build_contigs = function(reads.dt, col = "seed.frame", max.iter = 3, max.unaln =
     if (reads.dt[(loose.pair), .N] > 4) {
         ## browser()
         if (verbose) {message("Trying assembly with only loose reads")}
-        loose.tigs = RSeqLib::Fermi(reads = reads.dt[(loose.pair), get(col)], assemble = TRUE)
+        loose.tigs = RSeqLib::Fermi(reads = reads.dt[(loose.pair), get(col)],
+                                    qual = reads.dt[(loose.pair), get(qcol)],
+                                    assemble = TRUE)
         all.tigs = c(all.tigs, RSeqLib::contigs(loose.tigs))
     }
 
@@ -655,7 +705,8 @@ build_contigs = function(reads.dt, col = "seed.frame", max.iter = 3, max.unaln =
         if (length(unaln.reads) > 3) {
             unaln.qnames = reads.dt[unaln.reads, qname]
             unaln.reads = which(reads.dt[, qname] %in% unaln.qnames)
-            unaln.tigs = RSeqLib::Fermi(reads = reads.dt[unaln.reads, get(col)], assemble = TRUE)
+            unaln.tigs = RSeqLib::Fermi(reads = reads.dt[unaln.reads, get(col)],
+                                        qual = reads.dt[unaln.reads, get(qcol)], assemble = TRUE)
             if (verbose) { message("Number of new contigs: ", length(RSeqLib::contigs(unaln.tigs))) }
             if (length(RSeqLib::contigs(unaln.tigs))) {
                 all.tigs = c(all.tigs, RSeqLib::contigs(unaln.tigs))
@@ -672,42 +723,58 @@ build_contigs = function(reads.dt, col = "seed.frame", max.iter = 3, max.unaln =
 #'
 #' Given contigs and their alignments, remove contigs that are uninformative for loose end classification
 #'
-#' @param calns (GRanges) alignment of possibly multiple contigs
+#' @param calns (data.table) alignment of possibly multiple contigs
 #' @param athresh (numeric) # matching bases needed for alignment
 #' @param seed.pad (numeric) need at least this many bps from seed region to be considered a "distal" aln
 #'
-#' @return data.table with columns
-#' - outside.seed
-#' - outside.stranded.seed
-#' - alength
-#' - single.chunk
-#' - keep
-#' - fbi
-#' - unmapped bases
+#' @return data.table.
+#' keeps any metadata that was already a part of calns, and adds the following columns
+#' - outside.seed (logical)
+#' - outside.stranded.seed (logical)
+#' - alength (numeric) : total length of alignment
+#' - single.chunk (logical)
+#' - keep (logical) - this indicates whether the contig should be kept for further analysis
+#' - fbi (logical) - is the contig a foldback-inversion
+#' - unmapped bases (logical) does the contig have > athresh unmapped bases?
 qc_contigs = function(calns, seed.gr, athresh = 20, seed.pad = 1e3) {
 
-    calns.dt = as.data.table(calns)
+    calns.dt = copy(calns)
 
     if (!calns.dt[, .N]) {
         return(calns.dt)
     }
 
     ## what parts of the contig are completely outside of the seed region?
-    calns.dt[, outside.seed := !(calns %^% (seed.gr + seed.pad))]
-
-    ## in addition, what parts out outside the seed, but not ignoring strand?
-    calns.dt[, outside.stranded.seed := !(calns %^^% (seed.gr + seed.pad))]
+    calns.dt[, outside.seed := NA]
+    calns.dt[, outside.stranded.seed := NA]
+    if (calns.dt[!is.na(seqnames) & end >= start, .N]) {
+        calns = dt2gr(calns.dt[!is.na(seqnames) & end >= start, .(seqnames, start, end, strand)])
+        calns.dt[, outside.seed := !(calns %^% (seed.gr + seed.pad))]
+        calns.dt[, outside.stranded.seed := !(calns %^^% (seed.gr + seed.pad))]
+    }
 
     ## use countCigar to get the number of fully matching bases
-    calns.dt[, alength := bamUtils::countCigar(cigar)[, "M"]]
+    ## if alignment is valid, then count number of fully matching bases
+    calns.dt[, alength := 0]
+    if (calns.dt[!is.na(cigar), .N]) {
+        calns.dt[!is.na(cigar), alength := bamUtils::countCigar(cigar)[, "M"]]
+    }
 
     ## check if is single chunk and outside seed
     calns.dt[, single.chunk := all(abs(qwidth - alength) < athresh), by = qname]
 
+    ## check if it is unaligned
+    calns.dt[, unaligned := is.na(seqnames) | end < start | is.na(cigar)]
+
+    ## keep unaligned contigs if they are big
+    if (calns.dt[(unaligned), .N]) {
+        calns.dt[(unaligned), keep := qwidth > athresh]
+    }
+
     ## for alignments that are a single chunk,
     ## all such alignments need to be outside the seed region
     ## or all alignments need to have at least 20 bps that do not match
-    if (calns.dt[(single.chunk), .N]) {
+    if (calns.dt[(single.chunk) & (!unaligned), .N]) {
         calns.dt[(single.chunk), keep := all(outside.seed) & any(alength > athresh), by = qname]
         ## add other metadata columns which usually pertain only to split contigs
         calns.dt[(single.chunk), fbi := FALSE]
@@ -721,10 +788,10 @@ qc_contigs = function(calns, seed.gr, athresh = 20, seed.pad = 1e3) {
     ## - some parts of the contig align outside the seed region --> chimeric
 
     ## we can distinguish between these three cases using cgChain
-    if (calns.dt[!(single.chunk), .N]) {
+    if (calns.dt[!(single.chunk) & !(unaligned), .N]) {
 
         ## iterate over unique qnames
-        qns = unique(calns.dt[(!single.chunk), qname])
+        qns = unique(calns.dt[(!single.chunk) & (!unaligned), qname])
 
         clf = lapply(qns,
                      function (qn) {
