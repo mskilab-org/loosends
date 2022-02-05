@@ -32,6 +32,7 @@
 #' @param outdir (character)
 #' @param pad (numeric)
 #' @param mask (character) path to GRanges mask
+#' @param cleanup (logical) remove temporary files? default TRUE
 #' @param verbose (logical)
 #'
 #' @return data.table of reads + mates
@@ -46,6 +47,7 @@ loosereads_wrapper = function(ranges = GRanges(),
                               outdir = "./",
                               pad = 5000,
                               mask = "/dev/null",
+                              cleanup = TRUE,
                               verbose = FALSE) {
 
     tparams = grab_looseread_params(gr = ranges, bam = tbam, pad = pad, mask = mask, verbose = verbose)
@@ -96,6 +98,19 @@ loosereads_wrapper = function(ranges = GRanges(),
 
     res = loose.reads2(tbam = tsub, taln = taln, nbam = nsub, naln = naln, id = id, 
                        filter = FALSE, verbose = verbose)
+
+    ## remove temporary files
+    if (cleanup) {
+        if (verbose) { message("Removing temporary files!") }
+        ## sam, bam, .bai, fq
+        temp.fn = list.files(outdir, recursive = TRUE, full.names = TRUE,
+                             pattern = "(bai$)|(bam$)|(sam$)|(fq$)")
+        if (verbose) {
+            message(paste(temp.fn, sep = "\n"))
+        }
+        sapply(temp.fn, file.remove)
+    }
+
     return(res)
         
 }
@@ -484,6 +499,7 @@ realign_loosereads = function(bam,
         stop("Error!")
     }
 
+
     return(final.fn)
 }
 
@@ -556,8 +572,12 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
         aln.reads[, qname := gsub("/[1|2]$", "", qname)]
         aln.reads[, R1 := bamflag(flag)[, "isFirstMateRead"]==1]
         aln.reads[, R2 := bamflag(flag)[, "isSecondMateRead"]==1]
+
+        ## use the primary alignment
+        aln.reads[, primary := bamUtils::bamflag(flag)[, "isNotPrimaryRead"] == 0]
+        aln.reads = aln.reads[(primary),]
     }
-    
+
     ## recast reads as data table
     reads.dt = as.data.table(reads)
     ## setkeyv(reads.dt, c("qname", "R1"))
@@ -616,5 +636,16 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
     ## mapq is the probability of given read aligning
     ## MQ is mapq of the mate
     realn[, high.mate := mapq>50 & (is.na(MQ) | MQ < 1)]
+
+    ## annotate whether the pair is discordant
+    realn[, concord := !(loose.pair) &
+                .N == 2 &
+                length(unique(seqnames)) == 1 &
+                strand[R1] != strand[R2] &
+                strand[start == min(start)]=="+" &
+                min(start) + 3e3 > max(start), by=qname]
+
+    ## annotate which is anchor
+    realn[, anchor := (loose.pair & high.mate) | ( !(loose.pair) & mapq > 50 & !(concord))]
     return(realn)
 }
