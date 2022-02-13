@@ -548,10 +548,15 @@ contig.support = function(reads,
         alchunks[, concordant.sign := all(contig.sign == contig.sign[1]), by = qname]
 
         ## check if we never go from R1 == FALSE to R1 == TRUE
-        alchunks[, concordant.R1R2 := all(diff(!R1)>=0), by = qname]
+        ## alchunks[, concordant.R1R2 := all(diff(!R1)>=0), by = qname]
 
         ## check to see that our contig.start always increasing or decreasing
-        alchunks[, concordant.start := all(diff(contig.sign[1]*contig.start)>0), by = qname]
+        ## alchunks[, concordant.start := all(diff(contig.sign[1]*contig.start)>0), by = qname]
+
+        ## new code from marcin to make concordant.R1R2 and concordant.start robust to small inserts
+        alchunks[, both := any(R1) & any(!R1), by = qname]
+        alchunks[, concordant.R1R2 := ifelse(both,(contig.sign*sign((contig.start[R1][1]<contig.start[!R1][1]) - 0.5))>0, TRUE), by = qname]
+        alchunks[, concordant.start := all((contig.sign[1]*diff(start))>0), by = .(qname, R1)]
 
         alchunks[, contig.isize := diff(range(contig.start, contig.end)), by = qname]
         alchunks[, bases := sum(width), by = qname]
