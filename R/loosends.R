@@ -12,7 +12,10 @@
 #' @import gChain
 #' @import gTrack
 #' @import gGnome
+#' @import readsupport
 #' @import BSgenome.Hsapiens.UCSC.hg19
+#' @importFrom stats start end
+
 
 #' @name call_loose_end_wrapper
 #' @title call_loose_end_wrapper

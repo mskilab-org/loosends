@@ -44,5 +44,5 @@ list with two items
 }
 }
 \description{
-process_loose_ends
+Annotate a set of loose ends (ranges) based on local assembly of adjacent read pairs
 }

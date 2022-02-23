@@ -1,7 +1,7 @@
 #' @name process_loose_ends
 #' @title process_loose_ends
 #'
-#' @descriptiong
+#' @description
 #'
 #' Annotate a set of loose ends (ranges) based on local assembly of adjacent read pairs
 #'

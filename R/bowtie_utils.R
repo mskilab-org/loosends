@@ -9,10 +9,10 @@
 #' 
 #' @param reads (data.table with columns qname, seq)
 #' @param ref.seq (data.table with columns qname, seq)
-#' @param ref.dir
-#' @param ref.basename
-#' @param outdir
-#' @param verbose
+#' @param ref.dir (character) path to directory with reference fastas
+#' @param ref.basename (character) basename of reference fasta
+#' @param outdir (character) path to temporary output directory
+#' @param verbose (logical)  default FALSE
 #' 
 #' @return GRanges with alignment
 bowtie_aln = function(reads,

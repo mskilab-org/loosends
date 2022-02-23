@@ -18,7 +18,13 @@ bowtie_aln(
 
 \item{ref.seq}{(data.table with columns qname, seq)}
 
-\item{verbose}{}
+\item{ref.dir}{(character) path to directory with reference fastas}
+
+\item{ref.basename}{(character) basename of reference fasta}
+
+\item{outdir}{(character) path to temporary output directory}
+
+\item{verbose}{(logical)  default FALSE}
 }
 \value{
 GRanges with alignment

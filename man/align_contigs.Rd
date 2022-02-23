@@ -33,5 +33,8 @@ align_contigs(
 data.table with contig alignment and metadata fields c_type and c_spec
 }
 \description{
-align_contigs
+Align contigs (character vector) to reference
+Then aannotate the segments of the alignment according to reference seqnames
+
+Relies on seqnames --> annotation mapping included as part of the package...
 }

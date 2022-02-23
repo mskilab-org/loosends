@@ -758,7 +758,7 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
 #' @name align_contigs
 #' @title align_contigs
 #'
-#' @descripion
+#' @description
 #'
 #' Align contigs (character vector) to reference
 #' Then aannotate the segments of the alignment according to reference seqnames
