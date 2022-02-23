@@ -31,6 +31,7 @@ test_that(desc = "test contig support for single contig", code = {
                               contigs.dt = single.dt,
                               ref.bwa = ref.obj$human,
                               verbose = FALSE)
+                              ## verbose = FALSE)
             ## expect non-zero unmber of supporting reads
             expect_true(rc[, .N] > 0)
             ## expect all reads returned to be supporting reads
@@ -40,25 +41,24 @@ test_that(desc = "test contig support for single contig", code = {
     )
 })
 
-test_that(desc = "test contig support for single contig with bowtie", code = {
-    suppressWarnings(
-        expr = {
-            rc = read_support(le.dt = le.dt,
-                              reads.dt = reads.dt,
-                              contigs.dt = single.dt,
-                              fasta = ref.fasta, ##pastref.bwa = NULL,ref.obj$human,
-                              outdir = "~/testing_tmp/bowtie2_read_support",
-                              bowtie = TRUE,
-                              verbose = FALSE)
-            ## expect non-zero unmber of supporting reads
-            expect_true(rc[, .N] > 0)
-            ## expect all reads returned to be supporting reads
-            expect_true(all(rc[, supporting]))
-            expect_true(all(rc[, sample == this.pair]))
-        }
-    )
-})
-
+## test_that(desc = "test contig support for single contig with bowtie", code = {
+##     suppressWarnings(
+##         expr = {
+##             rc = read_support(le.dt = le.dt,
+##                               reads.dt = reads.dt,
+##                               contigs.dt = single.dt,
+##                               fasta = ref.fasta, ##pastref.bwa = NULL,ref.obj$human,
+##                               outdir = "~/testing_tmp/bowtie2_read_support",
+##                               bowtie = TRUE,
+##                               verbose = FALSE)
+##             ## expect non-zero unmber of supporting reads
+##             expect_true(rc[, .N] > 0)
+##             ## expect all reads returned to be supporting reads
+##             expect_true(all(rc[, supporting]))
+##             expect_true(all(rc[, sample == this.pair]))
+##         }
+##     )
+## })
 
 test_that(desc = "test contig support wrapper for multiple contigs", code = {
     suppressWarnings(
@@ -77,23 +77,23 @@ test_that(desc = "test contig support wrapper for multiple contigs", code = {
     )
 })
 
-test_that(desc = "test contig support wrapper with bowtie", code = {
-    suppressWarnings(
-        expr = {
-            rc = read_support_wrapper(le.dt = le.dt,
-                                      reads.dt = reads.dt,
-                                      contigs.dt = multiple.dt,
-                                      id = this.pair,
-                                      ref.bwa = NULL,##ref.obj$human,
-                                      ref.fasta = ref.fasta,
-                                      bowtie = TRUE,
-                                      outdir = "~/testing_tmp/contigsupport/wrapper_bowtie2",
-                                      verbose = FALSE)
-            ## expect number of rows to be equal to number of unique contigs
-            expect_true(rc[, .N] == length(unique(multiple.dt[, qname])))
-            ## expect all leix's to be represented
-            expect_true(all(multiple.dt[, leix] %in% rc[, leix]))
-        }
-    )
-})
+## test_that(desc = "test contig support wrapper with bowtie", code = {
+##     suppressWarnings(
+##         expr = {
+##             rc = read_support_wrapper(le.dt = le.dt,
+##                                       reads.dt = reads.dt,
+##                                       contigs.dt = multiple.dt,
+##                                       id = this.pair,
+##                                       ref.bwa = NULL,##ref.obj$human,
+##                                       ref.fasta = ref.fasta,
+##                                       bowtie = TRUE,
+##                                       outdir = "~/testing_tmp/contigsupport/wrapper_bowtie2",
+##                                       verbose = FALSE)
+##             ## expect number of rows to be equal to number of unique contigs
+##             expect_true(rc[, .N] == length(unique(multiple.dt[, qname])))
+##             ## expect all leix's to be represented
+##             expect_true(all(multiple.dt[, leix] %in% rc[, leix]))
+##         }
+##     )
+## })
 
