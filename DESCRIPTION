@@ -13,6 +13,7 @@ Remotes:
   github::mskilab/gTrack,
   github::mskilab/bamUtils,
   github::mskilab/RSeqLib,
+  github::mskilab/readsupport,
   bioc::3.10/GenomicRanges,
   bioc::3.10/rtracklayer,
   bioc::3.10/Rsamtools,
@@ -33,6 +34,7 @@ Imports:
     GenomicRanges,
     rtracklayer,
     Rsamtools,
+    readsupport,
     BSgenome.Hsapiens.UCSC.hg19
 License: GPL-3
 Encoding: UTF-8
