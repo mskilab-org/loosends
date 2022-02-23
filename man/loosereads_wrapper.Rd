@@ -15,6 +15,8 @@ loosereads_wrapper(
   id = "",
   outdir = "./",
   pad = 5000,
+  mask = "/dev/null",
+  cleanup = TRUE,
   verbose = FALSE
 )
 }
@@ -38,6 +40,10 @@ loosereads_wrapper(
 \item{outdir}{(character)}
 
 \item{pad}{(numeric)}
+
+\item{mask}{(character) path to GRanges mask}
+
+\item{cleanup}{(logical) remove temporary files? default TRUE}
 
 \item{verbose}{(logical)}
 }

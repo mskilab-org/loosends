@@ -67,3 +67,67 @@ test_that(desc = "check that contig QC retains informative contigs", code = {
         })
 })
 
+tra.reads.dt.fn = system.file("extdata", "tests", "new_caller_1", "tra.reads.rds", package = "loosends")
+tra.reads.dt = readRDS(tra.reads.dt.fn)
+
+test_that(desc = "Test build_contigs_wrapper for a translocation", code = {
+    suppressWarnings(
+        expr = {
+            tra.tigs = build_contigs_wrapper(gr = gr.flipstrand(tra.bp.gr),
+                                             reads.dt = tra.seed.rds,
+                                             ref = concat,
+                                             window = 1e3,
+                                             assembly.region = 1e3,
+                                             stride = 500,
+                                             pseudo.contigs = TRUE,
+                                             verbose = FALSE)
+            expect_true(tra.tigs[(keep), .N] > 0)
+            expect_true(tra.tigs[(keep) & (!outside.seed), .N] > 0)
+            expect_true(tra.tigs[(keep) & (outside.seed), .N] > 0)
+            expect_true(tra.tigs[(keep) & (!outside.seed), length(unique(strand)) == 1])
+        })
+})
+
+dup.reads.dt.fn = system.file("extdata", "tests", "new_caller_1", "dup.reads.rds", package = "loosends")
+dup.reads.dt = readRDS(dup.reads.dt.fn)
+
+
+test_that(desc = "Test build_contigs_wrapper for a duplication", code = {
+    suppressWarnings(
+        expr = {
+            dup.tigs = build_contigs_wrapper(gr = gr.flipstrand(dup.bp.gr),
+                                             reads.dt = dup.seed.rds,
+                                             ref = concat,
+                                             window = 1e3,
+                                             assembly.region = 1e3,
+                                             stride = 500,
+                                             pseudo.contigs = TRUE,
+                                             verbose = FALSE)
+            expect_true(dup.tigs[(keep), .N] > 0)
+            expect_true(dup.tigs[(keep) & (!outside.seed), .N] > 0)
+            expect_true(dup.tigs[(keep) & (outside.seed), .N] > 0)
+            expect_true(dup.tigs[(keep) & (!outside.seed), length(unique(strand)) == 1])
+        })
+})
+
+inv.reads.dt.fn = system.file("extdata", "tests", "new_caller_1", "inv.reads.rds", package = "loosends")
+inv.reads.dt = readRDS(inv.reads.dt.fn)
+
+
+test_that(desc = "Test build_contigs_wrapper for a inversion", code = {
+    suppressWarnings(
+        expr = {
+            inv.tigs = build_contigs_wrapper(gr = gr.flipstrand(inv.bp.gr),
+                                             reads.dt = inv.seed.rds,
+                                             ref = concat,
+                                             window = 1e3,
+                                             assembly.region = 1e3,
+                                             stride = 500,
+                                             pseudo.contigs = TRUE,
+                                             verbose = FALSE)
+            expect_true(inv.tigs[(keep), .N] > 0)
+            expect_true(inv.tigs[(keep) & (outside.stranded.seed), .N] > 0)
+            expect_true(inv.tigs[(keep) & (fbi), .N] > 0)
+        })
+})
+

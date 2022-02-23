@@ -7,6 +7,7 @@
 grab_looseread_params(
   gr = GRanges(),
   bam = character(),
+  mask = "/dev/null",
   pad = 5000,
   mate_pad = 150,
   verbose = FALSE
@@ -16,6 +17,8 @@ grab_looseread_params(
 \item{gr}{(GRanges) stranded GRanges representing loose ends}
 
 \item{bam}{(character) path to bam file}
+
+\item{mask}{(character) path to GRanges to excluded reads}
 
 \item{pad}{(numeric) pad around loose ends}
 

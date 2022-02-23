@@ -8,6 +8,7 @@ grab_seed_frame(
   reads.dt,
   seed.gr,
   seq.field = "reading.frame",
+  forward = TRUE,
   max.n = 0,
   verbose = FALSE
 )
@@ -18,6 +19,8 @@ grab_seed_frame(
 \item{seed.gr}{(GRanges) (stranded) seed window for assembly}
 
 \item{seq.field}{(character) where is the seq found? default reading.frame}
+
+\item{forward}{(logical) forward track? if FALSE, will reverse complement the seed frame (default TRUE)}
 
 \item{max.n}{(numeric) maximum number of low-quality "N" bases (default 0)}
 

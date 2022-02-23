@@ -1,5 +1,205 @@
 #' @importFrom stringr str_count
 
+#' @name call_loose_end2
+#' @title call_loose_end2
+#'
+#' @description
+#'
+#' labels a single loose end
+#'
+#' @param li (data.table, GRanges, or character coercible to GRanges)
+#' @param ri (reads from loosereads_wrapper)
+#' @param id (character) sample id
+#' @param concat.bwa (RSeqLib::BWA) reference BWA object with foreign sequences
+#' @param human.bwa (RSeqLib::BWA) reference BWA with human only sequences
+#' @param unmappable.gr (GRanges)
+#' @param unmappable.pad (numeric)
+#' @param window (numeric) assembly window (default 5e3)
+#' @param specificity.thresh (numeric) between 0 and 1, normal reads can be no more than this fraction
+#' @param verbose (logical) default FALSE
+#' @param ... (additional inputs to various helper functions)
+#'
+#' @return list with four items
+#' - call
+#' - contigs (curated contigs)
+#' - distal.bps (distal breakends)
+#' - all.bps (all breakends)
+#' - all.tigs (all contigs)
+call_loose_end2 = function(li,
+                           ri,
+                           id,
+                           concat.bwa,
+                           human.bwa,
+                           unmappable.gr,
+                           unmappable.pad,
+                           window = 5e3,
+                           specificity.thresh = 0.05,
+                           verbose = FALSE,
+                           ...) {
+
+    args = list(...)
+
+    if (verbose) {message("Preparing loose reads")}
+    le.dt = prep_loose_ends(li = li, id = id)
+    prepped.reads.dt = prep_loose_reads(li = le.dt, loose.reads.dt = ri)
+
+    if (verbose) {message("Building contigs")}
+    all.tigs = build_contigs_wrapper(gr = gr.flipstrand(dt2gr(le.dt)),
+                                     reads.dt = prepped.reads.dt,
+                                     ref = concat.bwa,
+                                     window = window,
+                                     verbose = verbose)
+
+    keep.tigs = copy(all.tigs)
+    if (all.tigs[, .N]) {
+        keep.tigs = all.tigs[(keep),]
+    }
+
+    if (verbose) { message("Number of potential ALT contigs based on structure: ", keep.tigs[, .N]) }
+
+    keep.tigs.support = check_contig_support_wrapper(reads.dt = prepped.reads.dt,
+                                                     calns = keep.tigs,
+                                                     ref = human,
+                                                     verbose = verbose)
+
+    if (verbose) { message("Grabbing contig breakends") }
+    keep.tigs.breakends = grab_contig_breakends_wrapper(calns = keep.tigs, verbose = verbose)
+
+    if (verbose) { message("Grabbing distal breakends") }
+    distal.bps = copy(keep.tigs.breakends)
+    final.tigs = copy(keep.tigs)
+    if (keep.tigs.breakends[, .N]) {
+        setkey(keep.tigs.breakends, "name")
+        setkey(keep.tigs.support, "name")
+        keep.tigs.breakends = keep.tigs.support[keep.tigs.breakends]
+        distal.bps = grab_distal_breakends(keep.tigs.breakends, specificity.thresh = specificity.thresh)
+        final.tigs = keep.tigs[(name %in% distal.bps[, name]), ]
+    }
+
+    ## label loose end based on relation to unmappable segment
+    proximal.mappable = !(dt2gr(le.dt) %^% (unmappable.gr + unmappable.pad))
+    distal.mappable = NA
+    clustered = NA
+    if (distal.bps[, .N]) {
+        clustered = all(distal.bps[, clustered])
+        if (clustered) {
+            distal.mappable = any(!(dt2gr(distal.bps) %^% (unmappable.gr + unmappable.pad)))
+        } else {
+            distal.mappable = all(!(dt2gr(distal.bps) %^% (unmappable.gr + unmappable.pad)))
+        }
+    }
+
+    if (verbose) {
+        message("Proximal contig mappable: ", proximal.mappable)
+        message("Distal contig mappable: ", distal.mappable)
+        message("Distal contig breakends clustered: ", clustered)
+    }
+
+    ## decide whether any contigs align to telomeres
+    aln.g.telomere = FALSE
+    aln.c.telomere = FALSE
+    if (final.tigs[, .N]) {
+        aln.g.telomere = final.tigs[, any(aln_g_telomere)]
+        aln.c.telomere = final.tigs[, any(aln_c_telomere)]
+    }
+
+    if (verbose) {
+        message("Contig contains G telomere: ", aln.g.telomere)
+        message("Contig contains C telomere: ", aln.c.telomere)
+    }
+
+    ## develop final table
+    category = ifelse(proximal.mappable,
+                      ifelse(distal.mappable, "T0", "T1"),
+                      ifelse(distal.mappable, "T1", "T2"))
+    if (is.na(distal.mappable)) {
+        category = "MYS"
+    }
+
+    if (verbose) { message("Category: ", category) }
+
+    call.dt = data.table(loose.end = paste0(le.dt[, seqnames], ":", le.dt[, start], le.dt[, strand]),
+                         sample = id,
+                         proximal.mappable = proximal.mappable,
+                         distal.mappable = distal.mappable,
+                         clustered = clustered,
+                         aln.g.telomere = aln.g.telomere,
+                         aln.c.telomere = aln.c.telomere,
+                         category = category)
+
+    return(list(call = call.dt,
+                contigs = final.tigs,
+                distal.bps = distal.bps,
+                all.bps = keep.tigs.breakends,
+                all.tigs = all.tigs))
+}
+
+#' @name grab_distal_breakends
+#' @title grab_distal_breakends
+#'
+#' @description
+#'
+#' Grab candidate distal breakends based on tumor-specificity
+#'
+#' If there are tumor-specific breakends:
+#' If there are MAPQ = 60 breakends all within 1kbp: returns a single breakend (the first one)
+#' If there are MAPQ = 60 breakends but not within 1 kbp: return MAPQ = 60 breakends
+#' Otherwise, return all breakends
+#'
+#' @param bps (data.table) data.table representing breakpoints coercible to GRanges. bps needs to have columns mapq, tumor.count, and normal.count representing supporting barcodes for that contig.
+#' @param mapq.thresh (default 60)
+#' @param specificity.thresh (numeric) cutoff for tumor-specific contigs
+#' @param pad (numeric) default 1 kbp
+#'
+#' @return a data.table with filtered breakends and additional metadata columns
+grab_distal_breakends = function(bps, mapq.thresh = 60, specificity.thresh = 0.05, pad = 1e3) {
+
+    if (!bps[, .N]) {
+        return(bps)
+    }
+
+    ## check whether there are any tumor-specific breakends
+    distal.bps = copy(bps)[(!proximal)]
+
+    if (!distal.bps[, .N]) {
+        return(distal.bps)
+    }
+    
+    distal.bps[, clustered := NA]
+    distal.bps[, specific := normal.count <= specificity.thresh * tumor.count & tumor.count > 1]
+
+    if (!distal.bps[(specific), .N]) {
+        return(distal.bps[(specific),])
+    }
+
+    distal.bps = distal.bps[(specific),]
+
+    ## label high mapq breakends
+    distal.bps[, high.mapq := mapq >= mapq.thresh]
+
+    ## filter as much as possible
+    if (distal.bps[(high.mapq), .N]) {
+        distal.bps = distal.bps[(high.mapq)]
+    }
+
+    if (distal.bps[(proximal.first), .N]) {
+        distal.bps = distal.bps[(proximal.first)]
+    }
+    
+    ## prefer contigs with split read support
+    if (distal.bps[(!mate.only), .N]) {
+        distal.bps = distal.bps[(!mate.only)]
+    }
+
+    ## check if all distal breakends go to the same place
+    bps.reduced.gr = GenomicRanges::reduce(dt2gr(distal.bps[, .(seqnames, start, end, strand)]) + pad) - pad
+    if (length(bps.reduced.gr) == 1) {
+        return(distal.bps[, clustered := TRUE])
+    } else {
+        return(distal.bps[, clustered := FALSE])
+    }
+}
+
 #' @name find_telomeres
 #' @title find_telomeres
 #'
@@ -35,7 +235,7 @@ find_telomeres = function(seq = character(), gorc = "g", verbose = FALSE) {
 #' category of the loose end. (e.g. T0/T1/T2/MYS)
 #' 
 #' @param li (data.table) data.table coercible to GRanges representing loose end
-#' @param bps (data.table) data.table representing breakpoints coercible to GRanges. bps needs to have columns tumor.count and normal.count representing supporting barcodes for that contig.
+#' @param bps (data.table) data.table representing breakpoints coercible to GRanges. bps needs to have columns mapq, tumor.count, and normal.count representing supporting barcodes for that contig.
 #' @param mapq.gr (GRanges) tiled granges with field mapq0.frac
 #' @param unmappable.gr (GRanges) ranges that are considered CN unmappable
 #' @param mappability.thresh (numeric) 0.1 for mappable categorization
@@ -158,6 +358,13 @@ label_contigs = function(le, bps, mapq.gr, unmappable.gr,
 #' @param name.field (character) default "name"
 #' @param verbose (logical) default FALSE
 check_contig_support_wrapper = function(calns, reads.dt, ref, name.field = "name", verbose = FALSE) {
+
+    ## if empty datable, just return something with no rows
+    if (!calns[, .N]) {
+        return(data.table(name = character(),
+                          tumor.count = numeric(),
+                          normal.count = numeric()))
+    }
 
     ## get unique qnames
     if (!name.field %in% names(calns)) {
@@ -345,6 +552,7 @@ grab_contig_breakends_wrapper = function(calns, name.field = "name", verbose = F
 #' - c_type (character)
 #' - c_spec (character)
 #' - cigar (character)
+#' - mapq (numeric)
 #' strand is in breakend orientation (so if there were a junction it would be consistent with the junction)
 grab_contig_breakends = function(calns, seed, reduce.pad = 20, seed.pad = 1e3, verbose = FALSE) {
 
@@ -434,10 +642,11 @@ grab_contig_breakends = function(calns, seed, reduce.pad = 20, seed.pad = 1e3, v
 
     ## add back some postentially useful metadata
     if (res[, .N]) {
-        extra.cols = mcols( dt2gr(res)[, c()] %$% dt2gr(calns)[, c("c_type", "c_spec", "cigar")] )
+        extra.cols = mcols( dt2gr(res)[, c()] %$% dt2gr(calns)[, c("c_type", "c_spec", "cigar", "mapq")] )
         res[, c_type := extra.cols$c_type]
         res[, c_spec := extra.cols$c_spec]
         res[, cigar := extra.cols$cigar]
+        res[, mapq := extra.cols$mapq]
         res[, seed := gr.string(seed)]
     }
     return(res)
@@ -452,10 +661,15 @@ grab_contig_breakends = function(calns, seed, reduce.pad = 20, seed.pad = 1e3, v
 #' @param window (numeric) how many bases around window to consider for assembly (default 5e3)
 #' @param assembly.region (numeric) how many bases at a time to consider for assembly (default 1e3)
 #' @param stride (numeric) stride for tiling window (default 500)
+#' @param pseudo.contigs (logical) include pseudo-contigs from discordant read clustering? default TRUE
+#' @param verbose (logical) default FALSE
+#'
+#' @return data.table with contig alignments
 build_contigs_wrapper = function(gr, reads.dt, ref,
                                  window = 5e3,
                                  assembly.region = 1e3,
                                  stride = 500,
+                                 pseudo.contigs = TRUE,
                                  verbose = FALSE) {
     tiles = unlist(GenomicRanges::slidingWindows(x = gr + window,
                                                  width = assembly.region,
@@ -464,28 +678,75 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
     all.contigs = lapply(seq_along(tiles),
                   function(ix) {
                       if (verbose) {message("Starting analysis for window: ", ix, " of ", length(tiles))}
-                      seed.frame.dt = grab_seed_frame(reads.dt,
-                                                      seed.gr = tiles[ix],
-                                                      seq.field = "reading.frame")
-                      if (seed.frame.dt[, .N]) {
-                          ctigs = build_contigs(seed.frame.dt, verbose = verbose)
-                          if (length(ctigs)) {
-                              if (verbose) { message("Aligning contigs to reference") }
-                              aln.ctigs = align_contigs(ctigs, ref, verbose = verbose, keep.unaligned = FALSE)
-                              ## aln.ctigs = ref[ctigs]
-                              if (verbose) { message("Filtering contigs based on structure") }
-                              qc.ctigs = qc_contigs(aln.ctigs, tiles[ix])
-                              if (qc.ctigs[, .N]) {
-                                  qc.ctigs[, name := paste(ix, qname, sep = ".")]
-                                  qc.ctigs[, seed := gr.string(tiles[ix])]
-                                  ## add back the original sequence!
-                                  ## qc.ctigs[, query.seq := ctigs[as.numeric(qname)]]
-                              }
-                          } else {
-                              qc.ctigs = data.table()
+                      ## get reads for forward and reverse frame separately
+                      forward.seed.frame.dt = grab_seed_frame(reads.dt,
+                                                              seed.gr = tiles[ix],
+                                                              seq.field = "reading.frame",
+                                                              forward = TRUE)
+                      reverse.seed.frame.dt = grab_seed_frame(reads.dt,
+                                                              seed.gr = gr.flipstrand(tiles[ix]),
+                                                              seq.field = "reading.frame",
+                                                              forward = FALSE)
+                      if (forward.seed.frame.dt[, .N]) {
+                          if (verbose) { message("Building forward track contigs") }
+                          forward.ctigs = build_contigs(forward.seed.frame.dt, verbose = verbose)
+                      } else {
+                          forward.ctigs = character()
+                      }
+
+                      if (reverse.seed.frame.dt[, .N]) {
+                          if (verbose) { message("Building reverse track contigs") }
+                          reverse.ctigs = build_contigs(reverse.seed.frame.dt, verbose = verbose)
+                      } else {
+                          reverse.ctigs = character()
+                      }
+                      ctigs = c(forward.ctigs, reverse.ctigs)
+                          
+                      if (length(ctigs)) {
+                          if (verbose) { message("Aligning contigs to reference") }
+                          aln.ctigs = align_contigs(ctigs,
+                                                    ref,
+                                                    verbose = verbose,
+                                                    keep.unaligned = FALSE)
+                          ## aln.ctigs = ref[ctigs]
+                          if (verbose) { message("Filtering contigs based on structure") }
+                          qc.ctigs = qc_contigs(aln.ctigs, tiles[ix])
+                          if (qc.ctigs[, .N]) {
+                              qc.ctigs[, name := paste(ix, qname, sep = ".")]
+                              qc.ctigs[, seed := gr.string(tiles[ix])]
                           }
                       } else {
                           qc.ctigs = data.table()
+                      }
+
+                      if (pseudo.contigs) {
+                          if (verbose) {
+                              message("Building pseudo-contigs from discordant read pairs")
+                          }
+                          forward.pseudo.ctigs = build_pseudo_contigs(forward.seed.frame.dt,
+                                                                      verbose = verbose)
+                          reverse.pseudo.ctigs = build_pseudo_contigs(reverse.seed.frame.dt,
+                                                                      verbose = verbose)
+                          pseudo.ctigs = c(forward.pseudo.ctigs, reverse.pseudo.ctigs)
+                          if (length(pseudo.ctigs)) {
+                              if (verbose) { message("Aligning pseudo-contigs to reference") }
+                              aln.pseudo.ctigs = align_contigs(pseudo.ctigs,
+                                                               ref,
+                                                               verbose = verbose,
+                                                               keep.unaligned = FALSE)
+                              if (verbose) {message("Filtering pseudo-contigs by structure")}
+                              qc.pseudo.ctigs = qc_contigs(aln.pseudo.ctigs, tiles[ix])
+                              if (qc.pseudo.ctigs[, .N]) {
+                                  qc.pseudo.ctigs[, name := paste("pseudo", ix, qname, sep = ".")]
+                                  qc.pseudo.ctigs[, seed := gr.string(tiles[ix])]
+                              }
+                          } else {
+                              qc.pseudo.ctigs = data.table()
+                          }
+                          if (verbose) {
+                              message("Number of pseudo-contigs: ", qc.pseudo.ctigs[, .N])
+                          }
+                          qc.ctigs = rbind(qc.ctigs, qc.pseudo.ctigs, fill = TRUE)
                       }
                       return(qc.ctigs)
                   })
@@ -601,9 +862,14 @@ align_contigs = function(tigs, ref,
 #' @param reads.dt (data.table) must have columns seqnames, start, end, strand, reading.frame, qname
 #' @param seed.gr (GRanges) (stranded) seed window for assembly
 #' @param seq.field (character) where is the seq found? default reading.frame
+#' @param forward (logical) forward track? if FALSE, will reverse complement the seed frame (default TRUE)
 #' @param max.n (numeric) maximum number of low-quality "N" bases (default 0)
 #' @param verbose (logical) default FALSE
-grab_seed_frame = function(reads.dt, seed.gr, seq.field = "reading.frame", max.n = 0, verbose = FALSE) {
+grab_seed_frame = function(reads.dt, seed.gr,
+                           seq.field = "reading.frame",
+                           forward = TRUE,
+                           max.n = 0,
+                           verbose = FALSE) {
 
     if (!reads.dt[, .N]) {
         return(reads.dt)
@@ -625,13 +891,16 @@ grab_seed_frame = function(reads.dt, seed.gr, seq.field = "reading.frame", max.n
     seed.strand = unique(as.character(strand(seed.gr)))[1]
     valid.reads.dt[, stranded.seed := strand[.SD$seed] == seed.strand, by = qname]
 
+    ## if assembling forward track
     ## for non-seed reads, reverse complement
+    ## if assembling reverse track
+    ## then RC seed reads, but leave the mates as is
     valid.reads.dt[, rc.reading.frame := as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(get(seq.field))))]
-    valid.reads.dt[, seed.frame := ifelse(seed, get(seq.field), rc.reading.frame)]
-    ## valid.reads.dt[, seed.frame := ifelse(seed , get(seq.field), rc.reading.frame)]
-    ## valid.reads.dt[, seed.frame := ifelse((seed & stranded.seed) | ((!seed) & (!stranded.seed)) ,
-    ##                                       get(seq.field),
-    ##                                       rc.reading.frame)]
+    if (forward) {
+        valid.reads.dt[, seed.frame := ifelse(seed, get(seq.field), rc.reading.frame)]
+    } else {
+        valid.reads.dt[, seed.frame := ifelse(seed, rc.reading.frame, get(seq.field))]
+    }
 
     ## get rid of anything with too many N's or zero length strings
     valid.reads.dt = valid.reads.dt[stringr::str_count(get(seq.field), "N") <= max.n & nchar(get(seq.field)) > 0,]
@@ -639,6 +908,96 @@ grab_seed_frame = function(reads.dt, seed.gr, seq.field = "reading.frame", max.n
     return(valid.reads.dt)
 }
 
+#' @name build_pseudo_contigs
+#' @title build_pseudo_contigs
+#'
+#' @description
+#'
+#' Check whether there are three (default) read pairs where the mate aligns within 1 kbp of each other
+#'
+#' If so returns the coordinates of the MATE (mate only)
+#'
+#' @param reads.dt (must have column seed frame or $col containing sequence and column seed or $scol containing whether or not the read is a seed read)
+#' @param col (character) field with character of seed reading frame, default "seed.frame"
+#' @param qcol (character) field indicating base quality, default "qual"
+#' @param scol (character) field indicating whether read is seed, default "seed"
+#' @param ccol (character) field indicating whether read is concordant, default "concord"
+#' @param min.mapq (numeric) minimum mapq (default 1)
+#' @param pad (numeric) pad for reducing alignments, default 1e3
+#' @param min.count.thresh (numeric) minimum number of reads aligning to the pseudo-contig (default 3)
+#' @param verbose (logical) default FALSE
+#'
+#' @return character vector of candidate contig sequences
+build_pseudo_contigs = function(reads.dt,
+                                col = "seed.frame",
+                                qcol = "qual",
+                                scol = "seed",
+                                ccol = "concord",
+                                min.mapq = 30,
+                                pad = 1e3,
+                                min.count.thresh = 5,
+                                verbose = FALSE) {
+
+    if (!reads.dt[, .N]) {
+        return(character())
+    }
+
+    if (!reads.dt[!(get(scol)), .N]) {
+        return(character())
+    }
+
+    if (!reads.dt[!(get(scol)),][!(get(ccol)),.N]) {
+        return(character())
+    }
+
+    if (!reads.dt[!(get(scol)),][!(get(ccol)),][mapq > min.mapq, .N]) {
+        return(character())
+    }
+
+    ## non-concordant reads
+    reads.dt = reads.dt[!(get(ccol)),][mapq > min.mapq,]
+    
+    ## grab mate ranges
+    ## strands are flipped because these are non-seed reads so we want to flip them to
+    ## the same reading frame as the seed
+    mate.gr = gr.flipstrand(dt2gr(reads.dt[!(get(scol)),][!(get(ccol)),]))
+    seed.gr = gr.flipstrand(dt2gr(reads.dt[(get(scol)),][!(get(ccol)),]))
+    mate.ranges = GenomicRanges::reduce(gUtils::gr.sum(mate.gr) %Q% (score > 0))
+
+    ## check overlap with non-seed mate, and no overlap with seed mate
+    if (length(mate.ranges)) {
+        mate.ranges = mate.ranges[mate.ranges %NN% (gr.flipstrand(mate.gr) + pad) > min.count.thresh & mate.ranges %NN% (seed.gr + pad) == 0]
+    } else {
+        return(character())
+    }
+
+    if (length(mate.ranges)) {
+        ## get only the ranges that are in standard sequences
+        mate.ranges = dt2gr(as.data.table(mate.ranges)[grepl('^(chr)*[0-9XY]+$', as.character(seqnames)),])
+        seqs = Biostrings::getSeq(Hsapiens, trim(gr.fix(gr.chr(mate.ranges), Hsapiens)))
+
+        ## make sure that there are a decent number of read alignments to the contig
+        ## and flip things where more reads align to the negative than to the positive strand
+        ## of the contig
+        tigs.bwa = BWA(seq = seqs)
+        ralns = tigs.bwa[reads.dt[, get(col)]]
+
+        ## this is the same logic as build_contigs
+        realns.strand.dt = as.data.table(ralns)[, .(n.positive.alns = sum(strand == "+"),
+                                                    n.negative.alns = sum(strand == "-")),
+                                                by = seqnames]
+        rc.seqnames = realns.strand.dt[n.negative.alns > n.positive.alns,
+                                       as.numeric(as.character(seqnames))]
+        good.seqnames = realns.strand.dt[pmax(n.positive.alns, n.negative.alns) >
+                                         20 * pmin(n.positive.alns, n.negative.alns),
+                                         as.numeric(as.character(seqnames))]
+        seqs[rc.seqnames] = as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seqs[rc.seqnames])))
+        seqs = seqs[good.seqnames]
+        return(seqs)
+    } else {
+        return(character())
+    }
+}
 
 #' @name build_contigs
 #' @title build_contigs
@@ -663,9 +1022,6 @@ build_contigs = function(reads.dt, col = "seed.frame", qcol = "qual", max.iter =
         return(character())
     }
 
-    if (!reads.dt[, .N]) {
-        return(character())
-    }
 
     ## TRY THREE CONDITIONS
     ## assembly everything
@@ -700,6 +1056,26 @@ build_contigs = function(reads.dt, col = "seed.frame", qcol = "qual", max.iter =
         if (verbose) { message("Checking for reads that don't align to any contigs") }
         tigs.bwa = BWA(seq = all.tigs)
         ralns = tigs.bwa[reads.dt[, get(col)]]
+
+        ## in theory, all reads should align to the same strand of the contig
+        ## as their sequence has been flipped so that the mates of seed reads are on the same
+        ## strand as the seed read
+        ## so we should count the number of positive and negative strand alignments of reads
+        ## and reverse-complement contigs with more negative strand read alignments
+        realns.strand.dt = as.data.table(ralns)[, .(n.positive.alns = sum(strand == "+"),
+                                                    n.negative.alns = sum(strand == "-")),
+                                                by = seqnames]
+        rc.seqnames = realns.strand.dt[n.negative.alns > n.positive.alns,
+                                       as.numeric(as.character(seqnames))]
+        ## also these should be a dichotomy - there should be many more of one than the other
+        good.seqnames = realns.strand.dt[pmax(n.positive.alns, n.negative.alns) >
+                                         20 * pmin(n.positive.alns, n.negative.alns),
+                                         as.numeric(as.character(seqnames))]
+        all.tigs[rc.seqnames] = as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(all.tigs[rc.seqnames])))
+        all.tigs = all.tigs[good.seqnames]
+            
+        ## if there are contigs where reads align to the negative strand of that contig
+        ## get the reverse complement
         unaln.reads = which(!(as.character(1:reads.dt[,.N]) %in% mcols(ralns)[, "qname"]))
         if (verbose) { message("Number of unaligned reads: ", length(unaln.reads)) }
         if (length(unaln.reads) > 3) {

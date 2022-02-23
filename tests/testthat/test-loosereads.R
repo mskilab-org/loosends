@@ -190,3 +190,31 @@ test_that(desc = "check loose read annotation with matched normal", code = {
         }
     )
 })
+
+## test loose reads wrapper
+test_that(desc = "check loose read wrapper with cleanup", code = {
+    suppressWarnings(expr = {
+        outdir = "~/testing_tmp"
+        reads.dt = loosereads_wrapper(ranges = ranges,
+                                      tbam = tbam,
+                                      nbam = nbam,
+                                      outdir = outdir,
+                                      ref = ref,
+                                      id = this.pair,
+                                      cleanup = TRUE)
+        ## check that there are reads for both ranges
+        expect_true(all(ranges %^% dt2gr(reads.dt)))
+        ## check that there are two reads per qname, exactly
+        expect_true(all(reads.dt[, .N, by = qname][, N]==2))
+        ## expect that there are reads for bot the tumor and the normal
+        expect_true(reads.dt[sample == this.pair, .N] > 0)
+        expect_true(reads.dt[sample == paste0(this.pair, "N"), .N] > 0)
+        ## check that stuff was properly cleaned up
+        expect_true(length(list.files(file.path(outdir, "tumor"), recursive = TRUE, pattern = "sam$")) == 0)
+        expect_true(length(list.files(file.path(outdir, "tumor"), recursive = TRUE, pattern = "bam$")) == 0)
+        expect_true(length(list.files(file.path(outdir, "tumor"), recursive = TRUE, pattern = "bai$")) == 0)
+        expect_true(length(list.files(file.path(outdir, "normal"), recursive = TRUE, pattern = "sam$")) == 0)
+        expect_true(length(list.files(file.path(outdir, "normal"), recursive = TRUE, pattern = "bam$")) == 0)
+        expect_true(length(list.files(file.path(outdir, "normal"), recursive = TRUE, pattern = "bai$")) == 0)
+    })
+})

@@ -7,6 +7,7 @@
 build_contigs(
   reads.dt,
   col = "seed.frame",
+  qcol = "qual",
   max.iter = 3,
   max.unaln = 3,
   verbose = FALSE
@@ -16,6 +17,8 @@ build_contigs(
 \item{reads.dt}{(must have column seed.frame)}
 
 \item{col}{(column name containing sequences for alignment) e.g. seed.frame}
+
+\item{qcol}{(column name for base quality, default 'qual')}
 
 \item{max.iter}{(numeric) max number of iterations for assembly}
 

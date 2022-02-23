@@ -11,6 +11,7 @@ build_contigs_wrapper(
   window = 5000,
   assembly.region = 1000,
   stride = 500,
+  pseudo.contigs = TRUE,
   verbose = FALSE
 )
 }
@@ -26,6 +27,13 @@ build_contigs_wrapper(
 \item{assembly.region}{(numeric) how many bases at a time to consider for assembly (default 1e3)}
 
 \item{stride}{(numeric) stride for tiling window (default 500)}
+
+\item{pseudo.contigs}{(logical) include pseudo-contigs from discordant read clustering? default TRUE}
+
+\item{verbose}{(logical) default FALSE}
+}
+\value{
+data.table with contig alignments
 }
 \description{
 build_contigs_wrapper

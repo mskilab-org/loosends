@@ -25,7 +25,5 @@ check_distal_only_contig_support(
 }
 \description{
 Gets supporting reads for contigs with distal-only alignments
-This is likely to give more false positives for split contigs
-
-Takes as input a contig alignment, reads, and a reference BWA object
+This is likely to cause false positives for split contigs so use only with distal-only contigs
 }

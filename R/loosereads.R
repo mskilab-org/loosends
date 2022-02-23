@@ -50,6 +50,18 @@ loosereads_wrapper = function(ranges = GRanges(),
                               cleanup = TRUE,
                               verbose = FALSE) {
 
+    ## grab every existing file in output directly and make sure we don't remove it, lol
+    tumor.files = character()
+    if (dir.exists(file.path(outdir, "tumor"))) {
+        tumor.files = list.files(file.path(outdir, "tumor"), recursive = FALSE, full.names = TRUE)
+    }
+
+    normal.files = character()
+    if (dir.exists(file.path(outdir, "normal"))) {
+        normal.files = list.files(file.path(outdir, "normal"), recursive = FALSE, full.names = TRUE)
+    }
+    
+
     tparams = grab_looseread_params(gr = ranges, bam = tbam, pad = pad, mask = mask, verbose = verbose)
     tsub = grab_loosereads(bam = tbam,
                            ranges = tparams$ranges,
@@ -103,12 +115,20 @@ loosereads_wrapper = function(ranges = GRanges(),
     if (cleanup) {
         if (verbose) { message("Removing temporary files!") }
         ## sam, bam, .bai, fq
-        temp.fn = list.files(outdir, recursive = TRUE, full.names = TRUE,
-                             pattern = "(bai$)|(bam$)|(sam$)|(fq$)")
+        ## grab all temporary file names
+        temp.tumor.fn = list.files(file.path(outdir, "tumor"), recursive = TRUE, full.names = TRUE,
+                             pattern = "(bai$)|(bam$)|(sam$)|(fq$)|(txt$)|(bed$)")
+        temp.normal.fn = list.files(file.path(outdir, "normal"), recursive = TRUE, full.names = TRUE,
+                             pattern = "(bai$)|(bam$)|(sam$)|(fq$)|(txt$)|(bed$)")
+        ## remove anything that was previously existing
+        temp.tumor.fn = setdiff(temp.tumor.fn, tumor.files)
+        temp.normal.fn = setdiff(temp.normal.fn, normal.files)
         if (verbose) {
-            message(paste(temp.fn, sep = "\n"))
+            message(paste(temp.tumor.fn, sep = "\n"))
+            message(paste(temp.normal.fn, sep = "\n"))
         }
-        sapply(temp.fn, file.remove)
+        sapply(temp.tumor.fn, file.remove)
+        sapply(temp.normal.fn, file.remove)
     }
 
     return(res)

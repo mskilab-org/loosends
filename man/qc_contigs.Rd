@@ -7,11 +7,24 @@
 qc_contigs(calns, seed.gr, athresh = 20, seed.pad = 1000)
 }
 \arguments{
-\item{calns}{(GRanges) alignment of possibly multiple contigs}
+\item{calns}{(data.table) alignment of possibly multiple contigs}
 
 \item{athresh}{(numeric) # matching bases needed for alignment}
 
 \item{seed.pad}{(numeric) need at least this many bps from seed region to be considered a "distal" aln}
+}
+\value{
+data.table.
+keeps any metadata that was already a part of calns, and adds the following columns
+\itemize{
+\item outside.seed (logical)
+\item outside.stranded.seed (logical)
+\item alength (numeric) : total length of alignment
+\item single.chunk (logical)
+\item keep (logical) - this indicates whether the contig should be kept for further analysis
+\item fbi (logical) - is the contig a foldback-inversion
+\item unmapped bases (logical) does the contig have > athresh unmapped bases?
+}
 }
 \description{
 Given contigs and their alignments, remove contigs that are uninformative for loose end classification

@@ -24,8 +24,18 @@ grab_contig_breakends(
 \item{verbose}{(logical)}
 }
 \value{
-data.table with seqnames, start, end, strand, and seed.side (indicating breakpoint)
+data.table with seqnames, start, end, strand, and a few metadata columns:
+\itemize{
+\item proximal (logical) proximal vs. distal breakends?
+\item proximal.first (logical) proximal part of the contig is in the first part of the contig
+\item seed.only (logical) contig is seed only
+\item mate.only (logical) conig is mate only
+\item c_type (character)
+\item c_spec (character)
+\item cigar (character)
+\item mapq (numeric)
 strand is in breakend orientation (so if there were a junction it would be consistent with the junction)
+}
 }
 \description{
 Get seed side and mate side breakends for a single contig.
@@ -34,5 +44,4 @@ Assumes that a unique qname is supplied.
 Also assumes that the alignment is split.
 
 If more than one contig is supplied, throws an exception.
-If the alignment is not split, returns an empty data table with a warning.
 }

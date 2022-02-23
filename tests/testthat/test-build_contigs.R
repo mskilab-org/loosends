@@ -20,3 +20,13 @@ test_that(desc = "check that assembly will find contigs at junction breakends", 
             expect_true(length(inv.tigs) > 0)
         })
 })
+
+test_that(desc = "test code for finding pseudo-contigs", code = {
+    suppressWarnings(
+        expr = {
+            pseudo.tra.tigs = build_pseudo_contigs(tra.seed.rds)
+            expect_true(length(pseudo.tra.tigs) > 0)
+            pseudo.dup.tigs = build_pseudo_contigs(dup.seed.rds)
+            expect_true(length(pseudo.dup.tigs) > 0)
+        })
+})

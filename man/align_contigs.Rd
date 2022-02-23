@@ -8,7 +8,9 @@ align_contigs(
   tigs,
   ref,
   refseq.fn = system.file("extdata", "reference.sequences.rds", package = "loosends"),
-  remove.decoy = FALSE,
+  primary.only = TRUE,
+  remove.decoy = TRUE,
+  keep.unaligned = FALSE,
   verbose = FALSE
 )
 }
@@ -19,12 +21,16 @@ align_contigs(
 
 \item{refseq.fn}{(character) path to seqnames annotation file (included)}
 
-\item{remove.decoy}{(logical) exclude alignment to decoy sequences? default FALSE}
+\item{primary.only}{(logical) default TRUE}
+
+\item{remove.decoy}{(logical) exclude alignment to decoy sequences? default TRUE}
+
+\item{keep.unaligned}{(logical) keep unaligend contigs?? default FALSE}
 
 \item{verbose}{(logical) default FALSE}
 }
 \value{
-GRanges with contig alignment and metadata fields c_type and c_spec
+data.table with contig alignment and metadata fields c_type and c_spec
 }
 \description{
 align_contigs

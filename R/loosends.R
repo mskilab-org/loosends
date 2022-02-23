@@ -963,7 +963,7 @@ read.based = function(li, ri, pad=NULL, human = NULL, return.contigs = FALSE, ma
         rtmp = rtmp[mapq >= mapq.thresh]
         if(nrow(rtmp)==0 | rtmp[(seed), .N==0] | rtmp[!(seed), .N==0]) return(NULL)
         ctig = GenomicRanges::reduce(gr.sum.strand(dt2gr(rtmp[(seed)])) %Q% (score > 0))
-        ctig = ctig[ctig %NN% dt2gr(rtmp[(seed)]) > 9]
+        ctig = ctig[ctig %NN% dt2gr(rtmp[(seed)]) > 9] ## needs at least nine overlapping reads
         if(length(ctig)==0) return(NULL)
         mate = GenomicRanges::reduce(gr.sum.strand(gr.flipstrand(dt2gr(rtmp[!(seed)]))) %Q% (score > 0))
         mate = mate[mate %NN% gr.flipstrand(dt2gr(rtmp[!(seed)])) > 9]

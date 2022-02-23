@@ -9,12 +9,12 @@ label_contigs(
   bps,
   mapq.gr,
   unmappable.gr,
-  mappability.thresh = 0.9,
-  specificity.thresh = 0.25
+  mappability.thresh = 0.5,
+  specificity.thresh = 0
 )
 }
 \arguments{
-\item{bps}{(data.table) data.table representing breakpoints coercible to GRanges. bps needs to have columns tumor.count and normal.count representing supporting barcodes for that contig.}
+\item{bps}{(data.table) data.table representing breakpoints coercible to GRanges. bps needs to have columns mapq, tumor.count, and normal.count representing supporting barcodes for that contig.}
 
 \item{mapq.gr}{(GRanges) tiled granges with field mapq0.frac}
 
