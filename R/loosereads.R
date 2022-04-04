@@ -551,10 +551,12 @@ loose.reads2 = function(tbam, taln, nbam=NA, naln=NA, id="", filter=FALSE, verbo
     treads = .sample.spec2(tbam, verbose = verbose)
     realn = parse_realignment(treads, aln_bam = taln, filter = filter, verbose = verbose)
     realn$sample = id
+    realn$track = paste("sample", ifelse(realn$strand == "+", "forward", "reverse"), sep = ".")
     if(check_file(nbam) && check_file(naln)) {
         nreads = .sample.spec2(nbam, verbose = verbose)
         nrealn = parse_realignment(nreads, aln_bam = naln, filter = filter, verbose = verbose)
-        nrealn$sample = paste0(id, "N")
+        nrealn$sample = paste(id, "N", sep = ".")
+        nrealn$track = paste("control", ifelse(nrealn$strand == "+", "forward", "reverse"), sep = ".")
         return(rbind(realn, nrealn, fill=TRUE, use.names=TRUE))
     }
     return(realn)
@@ -668,4 +670,80 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
     ## annotate which is anchor
     realn[, anchor := (loose.pair & high.mate) | ( !(loose.pair) & mapq > 50 & !(concord))]
     return(realn)
+}
+
+#' @name .sample.spec2
+#' @title .sample.spec2
+#'
+#' @description
+#' loads reads and mates for a single sample (tumor or normal)
+#' assumes that BAM has already been filtered and avoids slow lapply
+#' 
+#' @param bam path to BAM file
+#' @param chrsub (logical) substitute chr header? default TRUE
+#' @param verbose optional, default=FALSE
+.sample.spec2 = function(bam,
+                         chrsub = TRUE,
+                         verbose = FALSE) {
+    if (verbose) {
+        message(paste("loading reads from", bam))
+    }
+
+    ## load all sequences from BAM
+    ## this assumes that this BAM has been pre-filtered to only include reads in relevant windows
+    ## and their mates
+    all.reads.grl = bamUtils::read.bam(bam, all = TRUE,
+                                       pairs.grl = TRUE, ## return GRangesList with read pairs
+                                       isDuplicate=NA, ## load all reads, regardless of if duplicated
+                                       isPaired=TRUE,
+                                       tag="SA") ## indicate split alignments
+    reads = as.data.table(unlist(all.reads.grl))
+    ## splits = reads[!is.na(SA)]
+    ## if(nrow(splits) > 0){
+    ##     splits$SA = as.character(splits$SA)
+    ##     ## grab the windows into which the reads are split
+    ##     splwin = dunlist(strsplit(splits$SA, ";"))
+    ##     spl = unlist(lapply(strsplit(splwin$V1, ","), function(w) paste(w[1], w[2], sep=":")))
+    ##     spl = GRanges(spl)
+    ##     ## get the other side of the read with matching qname from the BAM file
+    ##     spl$qname = splits[as.integer(splwin$listid)]$qname
+    ##     splitsides = as.data.table(unlist(read.bam(bam, gUtils::gr.reduce(spl+150)-150, pairs.grl=T, isDuplicate=NA, tag="SA")) %Q% (qname %in% spl$qname))[order(mrnm, mpos)][!duplicated(paste(seqnames, start, qname, seq))]
+    ##     reads = rbind(reads, splitsides, fill=T, use.names=TRUE)
+    ## }
+    reads[, unpmate := bamflag(flag)[, "hasUnmappedMate"]==1]
+    reads[, isunp := start == 1 & is.na(seq)]
+    reads[, unp := any(unpmate) & any(isunp), by=qname]
+    ## for reads with that are unmapped
+    ## set the start and end to start/end of its mate
+    reads[(unp), ":="(start = ifelse(isunp, start[unpmate], start),
+                      end = ifelse(isunp, end[unpmate], end)),
+          by=qname]
+    ## a missing read is an qname in which one of the sequences is NA
+    reads[, missing := any(is.na(seq)), by=qname]
+    reads = reads[!is.na(seq)]
+    ## choose non-duplicated reads and designate one R1 and the other R2
+    rpair = reads[!duplicated(paste(qname, flag)),];
+    rpair$MQ = NULL
+    rpair[, R1 := bamflag(flag)[, "isFirstMateRead"]==1]
+    rpair[, R2 := bamflag(flag)[, "isSecondMateRead"]==1]
+    rpair[, paired := any(R1) & any(R2), by=qname]
+    reads = reads[, !c("unpmate", "isunp", "unp", "SA")]
+    if(verbose) {
+        message(ifelse(all(rpair$paired),
+                       "Found All Mates!!",
+                       "Some mates still missing - perhaps BAM was deduplicated"))
+    }
+    rpair[, MQ := rev(mapq), by=qname]
+    rpair[, count := .N, by = qname]
+    rpair[count == 0, MQ := 0]
+    flip = bamflag(rpair$flag)[, "isMinusStrand"] == 1 | rpair$strand == "-"
+    rpair[flip, seq := as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq)))]
+    rpair = rpair[rev(order(nchar(seq)))][!duplicated(paste(qname, R1))]
+    reads = dt2gr(rpair)
+
+    if (chrsub) {
+        return(gr.nochr(reads))
+    }
+
+    return(reads)
 }
