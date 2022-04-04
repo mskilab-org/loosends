@@ -25,7 +25,7 @@ test_that(desc = "test new caller wrapper", code = {
                                   unmappable.gr = dj,
                                   unmappable.pad = 5e3,
                                   window = 1000,
-                                  verbose = TRUE)
+                                  verbose = FALSE)
         })
 })
 

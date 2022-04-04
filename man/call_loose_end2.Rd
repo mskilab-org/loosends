@@ -10,10 +10,11 @@ call_loose_end2(
   id,
   concat.bwa,
   human.bwa,
-  unmappable.gr,
-  unmappable.pad,
   window = 5000,
-  specificity.thresh = 0.05,
+  low.mappability.gr.fn = system.file("extdata", "wide.multimapping.ranges.rds",
+    package = "loosends"),
+  unassembled.gr.fn = system.file("extdata", "assembly.gaps.ranges.rds", package =
+    "loosends"),
   verbose = FALSE,
   ...
 )
@@ -29,13 +30,11 @@ call_loose_end2(
 
 \item{human.bwa}{(RSeqLib::BWA) reference BWA with human only sequences}
 
-\item{unmappable.gr}{(GRanges)}
+\item{window}{(numeric) window in BP for building contigs, default 5e3}
 
-\item{unmappable.pad}{(numeric)}
+\item{low.mappability.gr.fn}{(character) path to low mappability ranges}
 
-\item{window}{(numeric) assembly window (default 5e3)}
-
-\item{specificity.thresh}{(numeric) between 0 and 1, normal reads can be no more than this fraction}
+\item{unassembled.gr.fn}{(character) path to low mappability ranges}
 
 \item{verbose}{(logical) default FALSE}
 
