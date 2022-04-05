@@ -718,8 +718,12 @@ qc_single_contig = function(calns.dt,
 
             ## get the number of distal chunks outside the stranded seed
             distal.nchunks.fbi = length((y %Q% (outside.stranded.seed)))
+            proximal.nchunks.fbi = length((y %Q% (!outside.stranded.seed)))
         } else {
+            mcols(y)[, "outside.stranded.seed"] = TRUE
+            mcols(x)[, "outside.stranded.seed"] = TRUE
             distal.nchunks.fbi = length(y)
+            proximal.nchunks.fbi = 0
         }
         
         outside.unstranded.seed.indicator = calns.dt[qname == qn, any(outside.seed & alength > athresh)]
@@ -733,9 +737,16 @@ qc_single_contig = function(calns.dt,
 
             ## get number of distal chunks
             distal.nchunks = length((y %Q% (outside.unstranded.seed)))
+            proximal.nchunks = length((y %Q% (!outside.unstranded.seed)))
         } else {
+            mcols(y)[, "outside.unstranded.seed"] = TRUE
+            mcols(x)[, "outside.unstranded.seed"] = TRUE
             distal.nchunks = length(y)
+            proximal.nchunks = 0
         }
+
+        
+
         
         ## indicate whether contig is noise or FBI
         fbi = (!outside.unstranded.seed.indicator) & (outside.stranded.seed.indicator) & (distal.nchunks.fbi == 1)
@@ -746,27 +757,62 @@ qc_single_contig = function(calns.dt,
         
         ## indicate whether contig represents a phased complex rearrangement
         complex = outside.unstranded.seed.indicator & (distal.nchunks > 1)
-        
+
+        ## get distal and proximal ranges in reference coordinates
         if (fbi | junction | complex) {
-            if (fbi) {
-                if (!is.null(y$outside.stranded.seed)) {
+            if (!fbi) {
+                if (proximal.nchunks > 0) {
+                    proximal.gr = y %Q% (!outside.unstranded.seed)
+                    proximal.contig.gr = x %Q% (!outside.unstranded.seed)
+                } else {
+                    proximal.gr = seed.gr
+                    proximal.contig.gr = GRanges()
+                }
+                if (distal.nchunks < length(y)) {
+                    distal.gr = y %Q% (outside.unstranded.seed)
+                    distal.contig.gr = x %Q% (outside.unstranded.seed)
+                } else {
+                    distal.gr = y
+                    distal.contig.gr = x
+                }
+            } else {
+                if (proximal.nchunks.fbi > 0) {
+                    proximal.gr = y %Q% (!outside.stranded.seed)
+                    proximal.contig.gr = x %Q% (!outside.stranded.seed)
+                } else {
+                    proximal.gr = seed.gr
+                    proximal.contig.gr = GRanges()
+                }
+                if (distal.nchunks.fbi < length(y)) {
                     distal.gr = y %Q% (outside.stranded.seed)
+                    distal.contig.gr = x %Q% (outside.stranded.seed)
                 } else {
                     distal.gr = y
-                }
-            } else if (junction) {
-                if (!is.null(y$outside.unstranded.seed)) {
-                    distal.gr = y %Q% (outside.unstranded.seed)
-                } else {
-                    distal.gr = y
-                }
-            } else if (complex) {
-                if (!is.null(y$outside.unstranded.seed)) {
-                    distal.gr = y %Q% (outside.unstranded.seed)
-                } else {
-                    distal.gr = y
+                    distal.contig.gr = x
                 }
             }
+        }
+        
+        if (fbi | junction | complex) {
+            ## if (fbi) {
+            ##     if (!is.null(y$outside.stranded.seed)) {
+            ##         distal.gr = y %Q% (outside.stranded.seed)
+            ##     } else {
+            ##         distal.gr = y
+            ##     }
+            ## } else if (junction) {
+            ##     if (!is.null(y$outside.unstranded.seed)) {
+            ##         distal.gr = y %Q% (outside.unstranded.seed)
+            ##     } else {
+            ##         distal.gr = y
+            ##     }
+            ## } else if (complex) {
+            ##     if (!is.null(y$outside.unstranded.seed)) {
+            ##         distal.gr = y %Q% (outside.unstranded.seed)
+            ##     } else {
+            ##         distal.gr = y
+            ##     }
+            ## }
             ## is the distal part of the contig unmappable?
             distal.unmappable = sum(distal.gr %o% low.mappability.gr,
                                     na.rm = TRUE)
@@ -782,30 +828,53 @@ qc_single_contig = function(calns.dt,
         insertion = NA
         homology = NA
         if ((junction | complex)) {
+
+            lgr = length(proximal.contig.gr)
+            
             ## insertion means there's a gap in the contig that isn't aligned to anything
-            insertion = ifelse(GenomicRanges::start(x[2]) >= GenomicRanges::end(x[1]) + 1,
-                               GenomicRanges::start(x[2]) - GenomicRanges::end(x[1]) - 1,
-                               0)
             ## homology means there's some bases in the contig aligning to multiple spots in the genome
-            homology = ifelse(GenomicRanges::end(x[1]) >= GenomicRanges::start(x[2]),
-                              GenomicRanges::end(x[1]) - GenomicRanges::start(x[2]) + 1,
-                              0)
-            proximal.breakend = paste0(seqnames(y[1]), ":",
-                                       GenomicRanges::end(y[1]),
-                                       ifelse(strand(y[1]) == "+", "-", "+"))
-            distal.breakend = paste0(seqnames(y[2]), ":",
-                                     GenomicRanges::start(y[2]),
-                                     strand(y[2]))
+            ## both only defined for chimeric (vs distal only) contigs
+            if (lgr > 0) {
+                
+                insertion = ifelse(GenomicRanges::start(distal.contig.gr[1]) >=
+                                   GenomicRanges::end(proximal.contig.gr[lgr]) + 1,
+                                   GenomicRanges::start(distal.contig.gr[1]) -
+                                   GenomicRanges::end(proximal.contig.gr[lgr]) - 1,
+                                   0)
+
+                homology = ifelse(GenomicRanges::end(proximal.contig.gr[lgr]) >=
+                                  GenomicRanges::start(distal.contig.gr[1]),
+                                  GenomicRanges::end(proximal.contig.gr[lgr]) -
+                                  GenomicRanges::start(distal.contig.gr[1]) + 1,
+                                  0)
+            }
+
+            plgr = length(proximal.gr)
+
+            ## proximal breakend is the END of the proximal region in reference coordinates
+            ## with strand in junction orientation
+            proximal.breakend = paste0(seqnames(proximal.gr[plgr]), ":",
+                                       GenomicRanges::end(proximal.gr[plgr]),
+                                       ifelse(strand(proximal.gr[plgr]) == "+", "-", "+"))
+
+            ## distal breakend is the START of the distal region in reference coordinates
+            ## with strand in junction orientation
+            distal.breakend = paste0(seqnames(distal.gr[1]), ":",
+                                     GenomicRanges::start(distal.gr[1]),
+                                     strand(distal.gr[1]))
+
+            ## jstring is a stringified junction that can be reverted with parse.grl
             if (junction) {
                 jstring = paste0(proximal.breakend, ",", distal.breakend)
             } else if (complex) {
-                if (!is.null(y$outside.unstranded.seed)) {
-                    y.distal = y %Q% (outside.unstranded.seed)
-                } else {
-                    y.distal = y
-                }
+                ## if (!is.null(y$outside.unstranded.seed)) {
+                ##     y.distal = y %Q% (outside.unstranded.seed)
+                ## } else {
+                ##     y.distal = y
+                ## }
+                
                 jstring = paste0(proximal.breakend, ",",
-                                 paste(grl.string(y.distal), collapse = ","))
+                                 paste(grl.string(distal.gr), collapse = ","))
             }
         } 
     }
