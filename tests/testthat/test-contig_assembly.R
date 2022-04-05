@@ -162,16 +162,11 @@ test_that(desc = "test contig QC for CPX", code = {
                                 low.mappability.gr = low.mappability.gr)
 
             ## check classification is correct
-            expect_true(all(fbi.qc[, junction]))
-            expect_true(all(fbi.qc[, fbi]))
-            expect_true(all(fbi.qc[, !is.na(jstring)]))
+            expect_true(all(cpx.qc[, complex]))
+            expect_true(all(cpx.qc[, !is.na(jstring)]))
 
             ## check correct jstring
-            gr = unlist(parse.grl(fbi.qc[, jstring][1]))
-            expect_true(all(gr %^% (unlist(fbi.grl) + 250)))
-
-            ## check orientation is correct
-            expect_true(strand(gr[1]) == "-")
-            expect_true(strand(gr[2]) == "-")
+            gr = unlist(parse.grl(cpx.qc[, jstring][1]))
+            expect_true(all(gr %^% (unlist(cpx.grl) + 250)))
         })
 })

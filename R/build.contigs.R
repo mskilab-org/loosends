@@ -749,11 +749,23 @@ qc_single_contig = function(calns.dt,
         
         if (fbi | junction | complex) {
             if (fbi) {
-                distal.gr = y %Q% (outside.stranded.seed)
+                if (!is.null(y$outside.stranded.seed)) {
+                    distal.gr = y %Q% (outside.stranded.seed)
+                } else {
+                    distal.gr = y
+                }
             } else if (junction) {
-                distal.gr = y %Q% (outside.unstranded.seed)
+                if (!is.null(y$outside.unstranded.seed)) {
+                    distal.gr = y %Q% (outside.unstranded.seed)
+                } else {
+                    distal.gr = y
+                }
             } else if (complex) {
-                distal.gr = y %Q% (outside.unstranded.seed)
+                if (!is.null(y$outside.unstranded.seed)) {
+                    distal.gr = y %Q% (outside.unstranded.seed)
+                } else {
+                    distal.gr = y
+                }
             }
             ## is the distal part of the contig unmappable?
             distal.unmappable = sum(distal.gr %o% low.mappability.gr,
@@ -787,7 +799,11 @@ qc_single_contig = function(calns.dt,
             if (junction) {
                 jstring = paste0(proximal.breakend, ",", distal.breakend)
             } else if (complex) {
-                y.distal = y %Q% (outside.unstranded.seed)
+                if (!is.null(y$outside.unstranded.seed)) {
+                    y.distal = y %Q% (outside.unstranded.seed)
+                } else {
+                    y.distal = y
+                }
                 jstring = paste0(proximal.breakend, ",",
                                  paste(grl.string(y.distal), collapse = ","))
             }
