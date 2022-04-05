@@ -3,7 +3,7 @@ library(testthat)
 library(gUtils)
 
 ## generally useful files
-ref = "~/DB/hg19/human_g1k_v37_decoy.fasta"
+## ref = "~/DB/hg19/human_g1k_v37_decoy.fasta"
 
 ## TEST CASE 1
 ## files for first test case
@@ -22,7 +22,7 @@ this.le = parse.gr("20:60158837-")
 
 ## test sample name for the first test case
 this.pair = "G32831.HCC1954"
-this.pair.normal = "G32831.HCC1954N"
+this.pair.normal = "G32831.HCC1954.N"
 
 ## expected results for the first test case
 qnames = readLines(con = qnames.txt)
