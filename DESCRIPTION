@@ -12,7 +12,7 @@ Remotes:
   github::mskilab/gChain,
   github::mskilab/gTrack,
   github::mskilab/bamUtils,
-  github::mskilab/RSeqLib,
+  github::mskilab/RSeqLib@zc_dev,
   github::mskilab/readsupport,
   bioc::3.10/GenomicRanges,
   bioc::3.10/rtracklayer,
