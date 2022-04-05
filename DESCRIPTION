@@ -35,7 +35,8 @@ Imports:
     rtracklayer,
     Rsamtools,
     readsupport,
-    BSgenome.Hsapiens.UCSC.hg19
+    BSgenome.Hsapiens.UCSC.hg19,
+    stringr
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
