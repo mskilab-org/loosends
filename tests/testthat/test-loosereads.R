@@ -78,64 +78,64 @@ test_that(desc = "check that reads and mates can be recovered", code = {
 })
 
 
-## test realignment
-test_that(desc = "check realignment with bowtie", code = {
-    suppressWarnings(
-        expr = {
-            realn.bam = realign_loosereads(bam = loosereads.bam,
-                                           ref = "human_g1k_v37_decoy",
-                                           bowtie = TRUE,
-                                           bowtie.dir = bowtie.dir,
-                                           outdir = "~/testing_tmp/bowtie",
-                                           verbose = FALSE)
-            expect_true(file.exists(realn.bam))
-            expect_true(file.info(realn.bam)$size > 0)
-            ## check that this matches with original realignment
-            aln.bam.grl = bamUtils::read.bam(aln.bam, all = TRUE,
-                                             isPaired = NA,
-                                             pairs.grl = TRUE,
-                                             isDuplicate = NA)
-            aln.bam.gr = unlist(aln.bam.grl)
-            realn.bam.grl = bamUtils::read.bam(realn.bam, all = TRUE,
-                                                isPaired = NA,
-                                                pairs.grl = TRUE,
-                                                isDuplicate = NA)
-            realn.bam.gr = unlist(realn.bam.grl)
-            ## gsub the qnames
-            mcols(realn.bam.gr)[, "qname"] = gsub("/[1|2]$", "", mcols(realn.bam.gr)[, "qname"])
-            expect_true(length(intersect(realn.bam.gr$qname, aln.bam.gr$qname)) > 0)
-            expect_true(length(realn.bam.gr %&% aln.bam.gr) > 0)
-        }
-    )
-})
+## ## test realignment
+## test_that(desc = "check realignment with bowtie", code = {
+##     suppressWarnings(
+##         expr = {
+##             realn.bam = realign_loosereads(bam = loosereads.bam,
+##                                            ref = "human_g1k_v37_decoy",
+##                                            bowtie = TRUE,
+##                                            bowtie.dir = bowtie.dir,
+##                                            outdir = "~/testing_tmp/bowtie",
+##                                            verbose = FALSE)
+##             expect_true(file.exists(realn.bam))
+##             expect_true(file.info(realn.bam)$size > 0)
+##             ## check that this matches with original realignment
+##             aln.bam.grl = bamUtils::read.bam(aln.bam, all = TRUE,
+##                                              isPaired = NA,
+##                                              pairs.grl = TRUE,
+##                                              isDuplicate = NA)
+##             aln.bam.gr = unlist(aln.bam.grl)
+##             realn.bam.grl = bamUtils::read.bam(realn.bam, all = TRUE,
+##                                                 isPaired = NA,
+##                                                 pairs.grl = TRUE,
+##                                                 isDuplicate = NA)
+##             realn.bam.gr = unlist(realn.bam.grl)
+##             ## gsub the qnames
+##             mcols(realn.bam.gr)[, "qname"] = gsub("/[1|2]$", "", mcols(realn.bam.gr)[, "qname"])
+##             expect_true(length(intersect(realn.bam.gr$qname, aln.bam.gr$qname)) > 0)
+##             expect_true(length(realn.bam.gr %&% aln.bam.gr) > 0)
+##         }
+##     )
+## })
 
-## test realignment
-test_that(desc = "check realignment", code = {
-    suppressWarnings(
-        expr = {
-            realn.bam = realign_loosereads(bam = loosereads.bam,
-                                           ref = ref,
-                                           outdir = "~/testing_tmp",
-                                           verbose = FALSE)
-            expect_true(file.exists(realn.bam))
-            expect_true(file.info(realn.bam)$size > 0)
+## ## test realignment
+## test_that(desc = "check realignment", code = {
+##     suppressWarnings(
+##         expr = {
+##             realn.bam = realign_loosereads(bam = loosereads.bam,
+##                                            ref = ref,
+##                                            outdir = "~/testing_tmp",
+##                                            verbose = FALSE)
+##             expect_true(file.exists(realn.bam))
+##             expect_true(file.info(realn.bam)$size > 0)
 
-            ## check that this matches with original realignment
-            aln.bam.grl = bamUtils::read.bam(aln.bam, all = TRUE,
-                                             isPaired = NA,
-                                             pairs.grl = TRUE,
-                                             isDuplicate = NA)
-            aln.bam.gr = unlist(aln.bam.grl)
-            realn.bam.grl = bamUtils::read.bam(realn.bam, all = TRUE,
-                                                isPaired = NA,
-                                                pairs.grl = TRUE,
-                                                isDuplicate = NA)
-            realn.bam.gr = unlist(realn.bam.grl)
-            expect_true(length(intersect(realn.bam.gr$qname, aln.bam.gr$qname)) > 0)
-            expect_true(length(realn.bam.gr %&% aln.bam.gr) > 0)
-        }
-    )
-})
+##             ## check that this matches with original realignment
+##             aln.bam.grl = bamUtils::read.bam(aln.bam, all = TRUE,
+##                                              isPaired = NA,
+##                                              pairs.grl = TRUE,
+##                                              isDuplicate = NA)
+##             aln.bam.gr = unlist(aln.bam.grl)
+##             realn.bam.grl = bamUtils::read.bam(realn.bam, all = TRUE,
+##                                                 isPaired = NA,
+##                                                 pairs.grl = TRUE,
+##                                                 isDuplicate = NA)
+##             realn.bam.gr = unlist(realn.bam.grl)
+##             expect_true(length(intersect(realn.bam.gr$qname, aln.bam.gr$qname)) > 0)
+##             expect_true(length(realn.bam.gr %&% aln.bam.gr) > 0)
+##         }
+##     )
+## })
 
 ## test loose read merging and annotation
 test_that(desc = "check loose read merging and annotation", code = {
@@ -191,30 +191,30 @@ test_that(desc = "check loose read annotation with matched normal", code = {
     )
 })
 
-## test loose reads wrapper
-test_that(desc = "check loose read wrapper with cleanup", code = {
-    suppressWarnings(expr = {
-        outdir = "~/testing_tmp"
-        reads.dt = loosereads_wrapper(ranges = ranges,
-                                      tbam = tbam,
-                                      nbam = nbam,
-                                      outdir = outdir,
-                                      ref = ref,
-                                      id = this.pair,
-                                      cleanup = TRUE)
-        ## check that there are reads for both ranges
-        expect_true(all(ranges %^% dt2gr(reads.dt)))
-        ## check that there are two reads per qname, exactly
-        expect_true(all(reads.dt[, .N, by = qname][, N]==2))
-        ## expect that there are reads for bot the tumor and the normal
-        expect_true(reads.dt[sample == this.pair, .N] > 0)
-        expect_true(reads.dt[sample == paste0(this.pair, "N"), .N] > 0)
-        ## check that stuff was properly cleaned up
-        expect_true(length(list.files(file.path(outdir, "tumor"), recursive = TRUE, pattern = "sam$")) == 0)
-        expect_true(length(list.files(file.path(outdir, "tumor"), recursive = TRUE, pattern = "bam$")) == 0)
-        expect_true(length(list.files(file.path(outdir, "tumor"), recursive = TRUE, pattern = "bai$")) == 0)
-        expect_true(length(list.files(file.path(outdir, "normal"), recursive = TRUE, pattern = "sam$")) == 0)
-        expect_true(length(list.files(file.path(outdir, "normal"), recursive = TRUE, pattern = "bam$")) == 0)
-        expect_true(length(list.files(file.path(outdir, "normal"), recursive = TRUE, pattern = "bai$")) == 0)
-    })
-})
+## ## test loose reads wrapper
+## test_that(desc = "check loose read wrapper with cleanup", code = {
+##     suppressWarnings(expr = {
+##         outdir = "~/testing_tmp"
+##         reads.dt = loosereads_wrapper(ranges = ranges,
+##                                       tbam = tbam,
+##                                       nbam = nbam,
+##                                       outdir = outdir,
+##                                       ref = ref,
+##                                       id = this.pair,
+##                                       cleanup = TRUE)
+##         ## check that there are reads for both ranges
+##         expect_true(all(ranges %^% dt2gr(reads.dt)))
+##         ## check that there are two reads per qname, exactly
+##         expect_true(all(reads.dt[, .N, by = qname][, N]==2))
+##         ## expect that there are reads for bot the tumor and the normal
+##         expect_true(reads.dt[sample == this.pair, .N] > 0)
+##         expect_true(reads.dt[sample == paste0(this.pair, "N"), .N] > 0)
+##         ## check that stuff was properly cleaned up
+##         expect_true(length(list.files(file.path(outdir, "tumor"), recursive = TRUE, pattern = "sam$")) == 0)
+##         expect_true(length(list.files(file.path(outdir, "tumor"), recursive = TRUE, pattern = "bam$")) == 0)
+##         expect_true(length(list.files(file.path(outdir, "tumor"), recursive = TRUE, pattern = "bai$")) == 0)
+##         expect_true(length(list.files(file.path(outdir, "normal"), recursive = TRUE, pattern = "sam$")) == 0)
+##         expect_true(length(list.files(file.path(outdir, "normal"), recursive = TRUE, pattern = "bam$")) == 0)
+##         expect_true(length(list.files(file.path(outdir, "normal"), recursive = TRUE, pattern = "bai$")) == 0)
+##     })
+## })
