@@ -33,8 +33,8 @@ cpx.seed = gr.flipstrand(GenomicRanges::resize(cpx.grl[[1]][1], width = 250, fix
 
 
 ## REFERNCE GRANGES
-unassembled.gr = readRDS(system.file("extdata", "assembly.gaps.ranges.rds"))
-low.mappability.gr = readRDS(system.file("extdata", "wide.multimapping.ranges.rds"))
+unassembled.gr = readRDS(system.file("extdata", "assembly.gaps.ranges.rds", package = "loosends"))
+low.mappability.gr = readRDS(system.file("extdata", "wide.multimapping.ranges.rds", package = "loosends"))
 
 test_that(desc = "test contig QC for DUP", code = {
     suppressWarnings(
