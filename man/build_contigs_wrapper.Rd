@@ -12,8 +12,8 @@ build_contigs_wrapper(
   assembly.region = 1000,
   stride = 500,
   pseudo.contigs = TRUE,
-  low.mappability.gr.fn = GRanges(),
-  unassembled.gr.fn = GRanges(),
+  low.mappability.gr = GRanges(),
+  unassembled.gr = GRanges(),
   verbose = FALSE
 )
 }
@@ -32,11 +32,11 @@ build_contigs_wrapper(
 
 \item{pseudo.contigs}{(logical) include pseudo-contigs from discordant read clustering? default TRUE}
 
-\item{verbose}{(logical) default FALSE}
-
 \item{low.mappability.gr}{(GRanges) path to GRanges containing low mappability bases}
 
 \item{unassembled.gr}{(GRanges) path to GRanges containing unassembled regions}
+
+\item{verbose}{(logical) default FALSE}
 }
 \value{
 data.table with contig alignments
