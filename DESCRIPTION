@@ -35,6 +35,7 @@ Imports:
     rtracklayer,
     Rsamtools,
     readsupport,
+    reshape2,
     BSgenome.Hsapiens.UCSC.hg19,
     stringr
 License: GPL-3
