@@ -699,6 +699,8 @@ qc_single_contig = function(calns.dt,
 
         ## identify check whether > athresh bases fail to align anywhere
         unmapped.bases.indicator = sum(width(x)) + athresh < qwidth
+
+        
         ## check alignment to *STRAND-SPECIFIC* seed
         outside.stranded.seed.indicator = calns.dt[qname == qn, any(outside.stranded.seed & alength > athresh)]
         if (calns.dt[qname == qn & (!outside.stranded.seed), .N]) {
@@ -706,7 +708,13 @@ qc_single_contig = function(calns.dt,
             mcols(x)[, "outside.stranded.seed"] = mcols(y)[, "outside.stranded.seed"]
             stranded.seed.region.width = sum(width(x %Q% (!outside.stranded.seed)))
             outside.stranded.seed.indicator = qwidth > stranded.seed.region.width + athresh
+
+            ## get the number of distal chunks outside the stranded seed
+            distal.nchunks = length((y %Q% (outside.stranded.seed)))
+        } else {
+            distal.nchunks = length(y)
         }
+        
         outside.unstranded.seed.indicator = calns.dt[qname == qn, any(outside.seed & alength > athresh)]
         if (calns.dt[qname == qn & (!outside.seed), .N]) {
             ## check alignment to *STRAND-AGNOSTIC* seed
@@ -715,16 +723,22 @@ qc_single_contig = function(calns.dt,
             mcols(x)[, "outside.unstranded.seed"] = mcols(y)[, "outside.unstranded.seed"]
             seed.region.width = sum(width(x %Q% (!outside.unstranded.seed)))
             outside.unstranded.seed.indicator = qwidth > seed.region.width + athresh
+
+            ## get number of distal chunks
+            distal.nchunks = length((y %Q% (outside.unstranded.seed)))
+        } else {
+            distal.nchunks = length(y)
         }
+        
         ## indicate whether contig is noise or FBI
-        fbi = (!outside.unstranded.seed.indicator) & (outside.stranded.seed.indicator) & (length(y) == 2)
+        fbi = (!outside.unstranded.seed.indicator) & (outside.stranded.seed.indicator) & (distal.nchunks == 1)
         keep = (fbi) | outside.unstranded.seed.indicator | unmapped.bases.indicator
 
         ## indicate whether contig represents a junction
-        junction = (fbi) | (outside.unstranded.seed.indicator & (length(y) == 2))
+        junction = (fbi) | (outside.unstranded.seed.indicator & (distal.nchunks == 1))
         
         ## indicate whether contig represents a phased complex rearrangement
-        complex = outside.unstranded.seed.indicator & (length(y) > 2)
+        complex = outside.unstranded.seed.indicator & (distal.nchunks > 1)
         
         if (fbi | junction | complex) {
             if (fbi) {
@@ -766,7 +780,9 @@ qc_single_contig = function(calns.dt,
             if (junction) {
                 jstring = paste0(proximal.breakend, ",", distal.breakend)
             } else if (complex) {
-                jstring = paste(grl.string(y), collapse = ",")
+                y.distal = y %Q% (outside.unstranded.seed)
+                jstring = paste0(proximal.breakend, ",",
+                                 paste(grl.string(y.distal), collapse = ","))
             }
         } 
     }
