@@ -717,9 +717,9 @@ qc_single_contig = function(calns.dt,
             outside.stranded.seed.indicator = qwidth > stranded.seed.region.width + athresh
 
             ## get the number of distal chunks outside the stranded seed
-            distal.nchunks = length((y %Q% (outside.stranded.seed)))
+            distal.nchunks.fbi = length((y %Q% (outside.stranded.seed)))
         } else {
-            distal.nchunks = length(y)
+            distal.nchunks.fbi = length(y)
         }
         
         outside.unstranded.seed.indicator = calns.dt[qname == qn, any(outside.seed & alength > athresh)]
@@ -738,7 +738,7 @@ qc_single_contig = function(calns.dt,
         }
         
         ## indicate whether contig is noise or FBI
-        fbi = (!outside.unstranded.seed.indicator) & (outside.stranded.seed.indicator) & (distal.nchunks == 1)
+        fbi = (!outside.unstranded.seed.indicator) & (outside.stranded.seed.indicator) & (distal.nchunks.fbi == 1)
         keep = (fbi) | outside.unstranded.seed.indicator | unmapped.bases.indicator
 
         ## indicate whether contig represents a junction
