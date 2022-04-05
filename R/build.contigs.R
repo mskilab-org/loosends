@@ -18,8 +18,8 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                                  assembly.region = 1e3,
                                  stride = 500,
                                  pseudo.contigs = TRUE,
-                                 low.mappability.gr.fn = GRanges(),
-                                 unassembled.gr.fn = GRanges(),
+                                 low.mappability.gr = GRanges(),
+                                 unassembled.gr = GRanges(),
                                  verbose = FALSE) {
 
     tiles = unlist(GenomicRanges::slidingWindows(x = gr + window,
@@ -39,14 +39,14 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                                                               seq.field = "reading.frame",
                                                               forward = FALSE)
                       if (forward.seed.frame.dt[, .N]) {
-                          if (verbose) { message("Building forward track contigs") }
+                          ## if (verbose) { message("Building forward track contigs") }
                           forward.ctigs = build_contigs(forward.seed.frame.dt, verbose = verbose)
                       } else {
                           forward.ctigs = character()
                       }
 
                       if (reverse.seed.frame.dt[, .N]) {
-                          if (verbose) { message("Building reverse track contigs") }
+                          ## if (verbose) { message("Building reverse track contigs") }
                           reverse.ctigs = build_contigs(reverse.seed.frame.dt, verbose = verbose)
                       } else {
                           reverse.ctigs = character()
@@ -54,14 +54,14 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                       ctigs = c(forward.ctigs, reverse.ctigs)
                           
                       if (length(ctigs)) {
-                          if (verbose) { message("Aligning contigs to reference") }
+                          ## if (verbose) { message("Aligning contigs to reference") }
                           aln.ctigs = align_contigs(ctigs,
                                                     ref,
                                                     verbose = verbose,
                                                     keep.unaligned = FALSE)
                           aln.ctigs = add_contig_ctypes(aln.ctigs, verbose = verbose)
                           aln.ctigs = check_contigs_for_telomeres(aln.ctigs, verbose = verbose)
-                          if (verbose) { message("Filtering contigs based on structure") }
+                          ## if (verbose) { message("Filtering contigs based on structure") }
                           qc.ctigs = qc_contigs(aln.ctigs,
                                                 tiles[ix],
                                                 low.mappability.gr = low.mappability.gr,
@@ -75,23 +75,23 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                       }
 
                       if (pseudo.contigs) {
-                          if (verbose) {
-                              message("Building pseudo-contigs from discordant read pairs")
-                          }
+                          ## if (verbose) {
+                          ##     message("Building pseudo-contigs from discordant read pairs")
+                          ## }
                           forward.pseudo.ctigs = build_pseudo_contigs(forward.seed.frame.dt,
                                                                       verbose = verbose)
                           reverse.pseudo.ctigs = build_pseudo_contigs(reverse.seed.frame.dt,
                                                                       verbose = verbose)
                           pseudo.ctigs = c(forward.pseudo.ctigs, reverse.pseudo.ctigs)
                           if (length(pseudo.ctigs)) {
-                              if (verbose) { message("Aligning pseudo-contigs to reference") }
+                              ## if (verbose) { message("Aligning pseudo-contigs to reference") }
                               aln.pseudo.ctigs = align_contigs(pseudo.ctigs,
                                                                ref,
                                                                verbose = verbose,
                                                                keep.unaligned = FALSE)
                               aln.pseudo.ctigs = add_contig_ctypes(aln.pseudo.ctigs, verbose = verbose)
                               aln.pseudo.ctigs = check_contigs_for_telomeres(aln.pseudo.ctigs, verbose = verbose)
-                              if (verbose) {message("Filtering pseudo-contigs by structure")}
+                              ## if (verbose) {message("Filtering pseudo-contigs by structure")}
                               qc.pseudo.ctigs = qc_contigs(aln.pseudo.ctigs,
                                                            tiles[ix],
                                                            low.mappability.gr = low.mappability.gr,
@@ -103,9 +103,9 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                           } else {
                               qc.pseudo.ctigs = data.table()
                           }
-                          if (verbose) {
-                              message("Number of pseudo-contigs: ", qc.pseudo.ctigs[, .N])
-                          }
+                          ## if (verbose) {
+                          ##     message("Number of pseudo-contigs: ", qc.pseudo.ctigs[, .N])
+                          ## }
                           qc.ctigs = rbind(qc.ctigs, qc.pseudo.ctigs, fill = TRUE)
                       }
                       return(qc.ctigs)
@@ -463,15 +463,15 @@ build_contigs = function(reads.dt, col = "seed.frame", qcol = "qual", max.iter =
 
     ## TRY THREE CONDITIONS
     ## assembly everything
-    if (verbose) {
-        message("Trying assembly with all reads")
-    }
+    ## if (verbose) {
+    ##     message("Trying assembly with all reads")
+    ## }
     tigs = RSeqLib::Fermi(reads = reads.dt[, get(col)], qual = reads.dt[, get(qcol)], assemble = TRUE)
     all.tigs = RSeqLib::contigs(tigs)
 
     ## assemble discordant pairs only
     if (reads.dt[(!concord), .N] > 4) {
-        if (verbose) {message("Trying assembly with only discordant reads")}
+        ## if (verbose) {message("Trying assembly with only discordant reads")}
         discordant.tigs = RSeqLib::Fermi(reads = reads.dt[(!concord), get(col)],
                                          qual = reads.dt[(!concord), get(qcol)],
                                          assemble = TRUE)
@@ -481,7 +481,7 @@ build_contigs = function(reads.dt, col = "seed.frame", qcol = "qual", max.iter =
     ## assemble loose pairs only
     if (reads.dt[(loose.pair), .N] > 4) {
         ## browser()
-        if (verbose) {message("Trying assembly with only loose reads")}
+        ## if (verbose) {message("Trying assembly with only loose reads")}
         loose.tigs = RSeqLib::Fermi(reads = reads.dt[(loose.pair), get(col)],
                                     qual = reads.dt[(loose.pair), get(qcol)],
                                     assemble = TRUE)
@@ -491,7 +491,7 @@ build_contigs = function(reads.dt, col = "seed.frame", qcol = "qual", max.iter =
     ## then align reads to all of the contigs found so far
     ## if there are unaligned reads, retry assembly just from the unaligned reads
     if (length(all.tigs)) {
-        if (verbose) { message("Checking for reads that don't align to any contigs") }
+        ## if (verbose) { message("Checking for reads that don't align to any contigs") }
         tigs.bwa = BWA(seq = all.tigs)
         ralns = tigs.bwa[reads.dt[, get(col)]]
 
@@ -515,13 +515,13 @@ build_contigs = function(reads.dt, col = "seed.frame", qcol = "qual", max.iter =
         ## if there are contigs where reads align to the negative strand of that contig
         ## get the reverse complement
         unaln.reads = which(!(as.character(1:reads.dt[,.N]) %in% mcols(ralns)[, "qname"]))
-        if (verbose) { message("Number of unaligned reads: ", length(unaln.reads)) }
+        ## if (verbose) { message("Number of unaligned reads: ", length(unaln.reads)) }
         if (length(unaln.reads) > 3) {
             unaln.qnames = reads.dt[unaln.reads, qname]
             unaln.reads = which(reads.dt[, qname] %in% unaln.qnames)
             unaln.tigs = RSeqLib::Fermi(reads = reads.dt[unaln.reads, get(col)],
                                         qual = reads.dt[unaln.reads, get(qcol)], assemble = TRUE)
-            if (verbose) { message("Number of new contigs: ", length(RSeqLib::contigs(unaln.tigs))) }
+            ## if (verbose) { message("Number of new contigs: ", length(RSeqLib::contigs(unaln.tigs))) }
             if (length(RSeqLib::contigs(unaln.tigs))) {
                 all.tigs = c(all.tigs, RSeqLib::contigs(unaln.tigs))
             }
@@ -766,15 +766,13 @@ qc_single_contig = function(calns.dt,
             if (junction) {
                 jstring = paste0(proximal.breakend, ",", distal.breakend)
             } else if (complex) {
-                y.middle = y[2:(length(y))]
-                jstring = paste0(proximal.breakend, ",",
-                                 paste(grl.string(y.middle), collapse = ","))
+                jstring = paste(grl.string(y), collapse = ",")
             }
         } 
     }
 
     ## is this a high mapq contig?
-    high.mapq = all(calns.dt[qname == qn, mapq > mapq.thresh], na.rm = TRUE)
+    high.mapq = all(calns.dt[qname == qn, mapq >= mapq.thresh], na.rm = TRUE)
 
     calns.dt[, ":="(keep = keep,
                     fbi = fbi,

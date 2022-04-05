@@ -22,8 +22,8 @@ check_contig_support_wrapper = function(calns,
                                         ref,
                                         name.field = "name",
                                         min.supp.reads = 2,
-                                        max.normal.reads = 5,
-                                        min.read.ratio = 5,
+                                        max.normal.reads = 10,
+                                        min.read.ratio = 10,
                                         verbose = FALSE)
 {
 
@@ -72,8 +72,8 @@ check_contig_support_wrapper = function(calns,
                                              message("Number of normal read pairs: ", normal.count)
                                          }
 
-                                         tumor.support = tumor.count >= min.supp.reads
-                                         normal.support = normal.count >= min.supp.reads
+                                         tumor.support = tumor.count > min.supp.reads
+                                         normal.support = normal.count > min.supp.reads
                                          tumor.specific = tumor.support
                                          if (normal.count > max.normal.reads) {
                                              tumor.specific = FALSE
