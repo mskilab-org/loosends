@@ -1,5 +1,3 @@
-#' @importFrom stringr str_count
-
 #' @name call_loose_end2
 #' @title call_loose_end2
 #'

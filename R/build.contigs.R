@@ -45,13 +45,16 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                           forward.ctigs = character()
                       }
 
-                      if (reverse.seed.frame.dt[, .N]) {
-                          ## if (verbose) { message("Building reverse track contigs") }
-                          reverse.ctigs = build_contigs(reverse.seed.frame.dt, verbose = verbose)
-                      } else {
-                          reverse.ctigs = character()
-                      }
-                      ctigs = c(forward.ctigs, reverse.ctigs)
+                      ctigs = forward.ctigs
+
+                      ## only use forward strand
+                      ## if (reverse.seed.frame.dt[, .N]) {
+                      ##     ## if (verbose) { message("Building reverse track contigs") }
+                      ##     reverse.ctigs = build_contigs(reverse.seed.frame.dt, verbose = verbose)
+                      ## } else {
+                      ##     reverse.ctigs = character()
+                      ## }
+                      ## ctigs = c(forward.ctigs, reverse.ctigs)
                           
                       if (length(ctigs)) {
                           ## if (verbose) { message("Aligning contigs to reference") }
@@ -80,9 +83,13 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                           ## }
                           forward.pseudo.ctigs = build_pseudo_contigs(forward.seed.frame.dt,
                                                                       verbose = verbose)
-                          reverse.pseudo.ctigs = build_pseudo_contigs(reverse.seed.frame.dt,
-                                                                      verbose = verbose)
-                          pseudo.ctigs = c(forward.pseudo.ctigs, reverse.pseudo.ctigs)
+                          pseudo.ctigs = forward.pseudo.ctigs
+
+                          ## only use forward strand reads
+                          ## reverse.pseudo.ctigs = build_pseudo_contigs(reverse.seed.frame.dt,
+                          ##                                             verbose = verbose)
+                          ## pseudo.ctigs = c(forward.pseudo.ctigs, reverse.pseudo.ctigs)
+                          
                           if (length(pseudo.ctigs)) {
                               ## if (verbose) { message("Aligning pseudo-contigs to reference") }
                               aln.pseudo.ctigs = align_contigs(pseudo.ctigs,
