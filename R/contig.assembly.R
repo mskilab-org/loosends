@@ -81,7 +81,15 @@ call_loose_end2 = function(li,
 
     label.dt = check_contig_concordance(keep.tigs.support, verbose = verbose)
 
+    ## add back loose end to help with analysis/merging
     label.dt[, loose.end := paste0(le.dt[, seqnames], ":", le.dt[, start], le.dt[, strand])]
+
+    if (keep.tigs.support[, .N]) {
+        keep.tigs.support[, loose.end := paste0(le.dt[, seqnames],
+                                                ":",
+                                                le.dt[, start],
+                                                le.dt[, strand])]
+    }
 
     ## make one unique table
     return(list(all.tigs = all.tigs,

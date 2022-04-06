@@ -157,6 +157,10 @@
 
         ## save sample info
         call.res[, sample := opt$id]
+
+        if (filtered.res[, .N]) {
+            filtered.res[, sample := opt$id]
+        }
         ## call.res = res$call
         ## contig.res = res$all.contigs
         ## filtered.res = res$filtered.contigs
