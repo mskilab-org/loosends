@@ -12,7 +12,6 @@ jobs:
   R-CMD-check:
     runs-on: ubuntu-latest
     env:
-      GITHUB_PAT: ${{ secrets.PAT }}
       R_KEEP_PKG_SOURCE: yes
     steps:
       - uses: actions/checkout@v2
@@ -26,6 +25,8 @@ jobs:
           extra-packages: rcmdcheck
 
       - uses: r-lib/actions/check-r-package@v1
+        with:
+          error-on: '"error"'
 
       - name: Show testthat output
         if: always()
