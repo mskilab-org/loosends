@@ -12,11 +12,13 @@ Remotes:
   github::mskilab/gChain,
   github::mskilab/gTrack,
   github::mskilab/bamUtils,
-  github::mskilab/RSeqLib@zc_dev,
+  github::mskilab/RSeqLib,
   github::mskilab/readsupport,
   bioc::3.10/GenomicRanges,
   bioc::3.10/rtracklayer,
   bioc::3.10/Rsamtools,
+  bioc::3.10/BSgenome.Hsapiens.UCSC.hg19,
+  bioc::3.10/Biostrings
 Depends:
     R (>= 3.5.1),
     gUtils
