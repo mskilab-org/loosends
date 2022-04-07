@@ -119,7 +119,7 @@ check_distal_only_contig_support = function(calns, reads.dt, ref.pad = 5e3, seed
     win = parse.gr(unique(calns[, seed]))
 
     if (verbose) { message("Grabbing reads near peak and their mates") }
-    seed.qnames = reads.dt[dt2gr(reads.dt) %^^% (win + seed.pad), qname]
+    seed.qnames = reads.dt[dt2gr(reads.dt) %^% (win + seed.pad), qname]
     window.reads.dt = reads.dt[qname %in% seed.qnames] ## which reads correspond with that qname?
     window.reads.gr = dt2gr(window.reads.dt)
 
@@ -165,7 +165,7 @@ check_split_contig_support = function(calns, reads.dt, ref, seed.pad = 0, verbos
     win = parse.gr(unique(calns[, seed]))
 
     if (verbose) { message("Grabbing reads near peak and their mates") }
-    seed.qnames = reads.dt[dt2gr(reads.dt) %^^% (win + seed.pad), qname]
+    seed.qnames = reads.dt[dt2gr(reads.dt) %^% (win + seed.pad), qname]
     window.reads.dt = reads.dt[qname %in% seed.qnames] ## which reads correspond with that qname?
     window.reads.gr = dt2gr(window.reads.dt)
 

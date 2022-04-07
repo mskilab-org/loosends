@@ -150,81 +150,66 @@ check_contig_concordance = function(calns, verbose = FALSE) {
             res[, complex := FALSE]
             res[, single.breakend := FALSE]
 
+            ## define usable contigs based on the presence of high-MAPQ alignments
             if (calns[, any(junction & high.mapq, na.rm = TRUE)]) {
                 res[, junction := TRUE]
-                res[, jstring := calns[(junction) & (high.mapq), jstring][1]]
-                if (calns[(junction) & (high.mapq), any(!is.na(insertion), na.rm = TRUE)]) {
-                    res[, insertion := calns[(junction) & (high.mapq), max(insertion, na.rm = TRUE)]]
-                }
-                if (calns[(junction) & (high.mapq), any(!is.na(homology), na.rm = TRUE)]) {
-                    res[, homology := calns[(junction) & (high.mapq), max(homology, na.rm = TRUE)]]
-                }
-                ## add c_type
-                res[, ":="(viral = any(calns[(junction) & (high.mapq), c_type %like% 'viral'], na.rm = TRUE),
-                           polya = any(calns[(junction) & (high.mapq), c_type %like% 'poly'], na.rm = TRUE),
-                           unassembled = any(calns[(junction) & (high.mapq),
-                                                   c_type %like% 'unassembled'],
-                                             na.rm = TRUE),
-                           decoy = any(calns[(junction) & (high.mapq), c_type %like% 'decoy'], na.rm = TRUE),
-                           human = all(calns[(junction) & (high.mapq), c_type %like% 'human'], na.rm = TRUE),
-                           repetitive = any(calns[(junction) & (high.mapq), c_type %like% 'rep'], na.rm = TRUE))]
-
-                ## add unmappable
-                res[, ":="(proximal.unmappable = median(calns[(junction) & (high.mapq), proximal.unmappable],
-                                                        na.rm = TRUE),
-                           proximal.unassembled = median(calns[(junction) & (high.mapq), proximal.unassembled],
-                                                        na.rm = TRUE),
-                           distal.unmappable = median(calns[(junction) & (high.mapq), distal.unmappable],
-                                                        na.rm = TRUE),
-                           distal.unassembled = median(calns[(junction) & (high.mapq), distal.unassembled],
-                                                        na.rm = TRUE),
-                           distal.foreign = any(calns[(junction) & (high.mapq), distal.foreign],
-                                                na.rm = TRUE))]
-                           
-                
+                calns.selection = calns[, (junction) & (high.mapq)]
             } else if (calns[, any(complex & high.mapq, na.rm = TRUE)]) {
                 res[, complex := TRUE]
-                res[, jstring := calns[(complex) & (high.mapq), jstring][1]]
-
-                res[, ":="(viral = any(calns[(complex) & (high.mapq), c_type %like% 'viral'], na.rm = TRUE),
-                           polya = any(calns[(junction) & (high.mapq), c_type %like% 'poly'], na.rm = TRUE),
-                           unassembled = any(calns[(junction) & (high.mapq),
-                                                   c_type %like% 'unassembled'],
-                                             na.rm = TRUE),
-                           decoy = any(calns[(complex) & (high.mapq), c_type %like% 'decoy'], na.rm = TRUE),
-                           human = all(calns[(complex) & (high.mapq), c_type %like% 'human'], na.rm = TRUE),
-                           repetitive = any(calns[(complex) & (high.mapq), c_type %like% 'rep'], na.rm = TRUE))]
-
-                res[, ":="(proximal.unmappable = median(calns[(complex) & (high.mapq), proximal.unmappable],
-                                                        na.rm = TRUE),
-                           proximal.unassembled = median(calns[(complex) & (high.mapq), proximal.unassembled],
-                                                        na.rm = TRUE),
-                           distal.unmappable = median(calns[(complex) & (high.mapq), distal.unmappable],
-                                                        na.rm = TRUE),
-                           distal.unassembled = median(calns[(complex) & (high.mapq), distal.unassembled],
-                                                        na.rm = TRUE),
-                           distal.foreign = any(calns[(complex) & (high.mapq), distal.foreign], na.rm = TRUE))]
-                
+                calns.selection = calns[, (complex) & (high.mapq)]
             } else {
+                calns.selection = rep(TRUE, times = calns[, .N])
                 res[, single.breakend := TRUE]
+            }
 
-                res[, ":="(viral = any(calns[, c_type %like% 'viral'], na.rm = TRUE),
-                           decoy = any(calns[, c_type %like% 'decoy'], na.rm = TRUE),
-                           polya = any(calns[, c_type %like% 'poly'], na.rm = TRUE),
-                           unassembled = any(calns[, c_type %like% 'unassembled'], na.rm = TRUE),
-                           human = all(calns[, c_type %like% 'human'], na.rm = TRUE),
-                           repetitive = any(calns[, c_type %like% 'rep'], na.rm = TRUE))]
+            ## fill in NA's with false
+            calns.selection[which(is.na(calns.selection))] = FALSE
 
-                res[, ":="(proximal.unmappable = median(calns[, proximal.unmappable],
-                                                        na.rm = TRUE),
-                           proximal.unassembled = median(calns[, proximal.unassembled],
-                                                         na.rm = TRUE),
-                           distal.unmappable = median(calns[, distal.unmappable],
-                                                      na.rm = TRUE),
-                           distal.unassembled = median(calns[, distal.unassembled],
-                                                       na.rm = TRUE),
-                           distal.foreign = any(calns[, distal.foreign], na.rm = TRUE))]
-                
+            ## define sequence characteristics
+            res[, ":="(viral = any(calns[calns.selection, c_type %like% 'viral'], na.rm = TRUE),
+                       polya = any(calns[calns.selection, c_type %like% 'poly'], na.rm = TRUE),
+                       unassembled = any(calns[calns.selection, c_type %like% 'unassembled'], na.rm = TRUE),
+                       decoy = any(calns[calns.selection, c_type %like% 'decoy'], na.rm = TRUE),
+                       human = all(calns[calns.selection, c_type %like% 'human'], na.rm = TRUE),
+                       repetitive = any(calns[calns.selection, c_type %like% 'rep'], na.rm = TRUE))]
+
+            ## add how many base pairs are unmappable?
+            res[, ":="(proximal.unmappable = median(calns[calns.selection, proximal.unmappable],
+                                                    na.rm = TRUE),
+                       proximal.unassembled = median(calns[calns.selection, proximal.unassembled],
+                                                     na.rm = TRUE),
+                       distal.unmappable = median(calns[calns.selection, distal.unmappable],
+                                                  na.rm = TRUE),
+                       distal.unassembled = median(calns[calns.selection, distal.unassembled],
+                                                   na.rm = TRUE),
+                       distal.foreign = any(calns[calns.selection, distal.foreign],
+                                            na.rm = TRUE))]
+
+            ## add junction string for breakends and complex variants
+            if (any(res[, junction]) || any(res[, complex]) ) {
+            
+                if (calns[calns.selection, any(!is.na(insertion), na.rm = TRUE)]) {
+                    res[, insertion := calns[calns.selection, max(insertion, na.rm = TRUE)]]
+                }
+                if (calns[calns.selection, any(!is.na(homology), na.rm = TRUE)]) {
+                    res[, homology := calns[calns.selection, max(homology, na.rm = TRUE)]]
+                }
+
+                res[, jstring := calns[calns.selection, jstring][1]]
+
+            }
+
+            ## add c_type
+            if (res[(viral), .N]) {
+                res[, viral.breakend := calns[calns.selection & (c_type %like% 'viral'), distal.breakend][1]]
+            } else {
+                res[, viral.breakend := NA_character_]
+            }
+
+            if (res[(repetitive), .N]) {
+                res[, rep.breakend := calns[calns.selection & (c_type %like% 'rep'), distal.breakend][1]]
+            } else {
+                res[, rep.breakend := NA_character_]
             }
 
             if (calns[, any(query_c_telomere, na.rm = TRUE)] |
