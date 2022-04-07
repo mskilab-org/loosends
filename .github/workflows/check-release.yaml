@@ -25,6 +25,8 @@ jobs:
       - name: Install dependencies
         run: |
           install.packages(c("remotes", "rcmdcheck"))
+          if (!require("BiocManager", quietly = TRUE) { install.packages("BiocManager") }
+          BiocManager::install("BSgenome.Hsapiens.UCSC.hg19")
           remotes::install_deps(dependencies = TRUE)
         shell: Rscript {0}
 
