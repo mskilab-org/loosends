@@ -12,20 +12,44 @@ jobs:
   R-CMD-check:
     runs-on: ubuntu-latest
     env:
-      GITHUB_PAT: ${{ secrets.PAT }}
       R_KEEP_PKG_SOURCE: yes
+      RCMDCHECK_ERROR_ON: error
+      GITHUB_PAT: ${{ secrets.PAT }}
     steps:
       - uses: actions/checkout@v2
 
       - uses: r-lib/actions/setup-r@v1
         with:
           use-public-rspm: true
-
-      - uses: r-lib/actions/setup-r-dependencies@v1
-        with:
-          extra-packages: rcmdcheck
+          
+      - name: Install Linux system dependencies
+        run: |
+          sudo -s apt-get install -y libcurl4-openssl-dev
+          
+      - name: Query dependencies
+        run: |
+          install.packages(c('remotes', 'BiocManager'))
+          options(repos = c(getOption("repos"), BiocManager::repositories()))
+          saveRDS(remotes::dev_package_deps(dependencies = TRUE), "depends.Rds", version = 2)
+        shell: Rscript {0}
+        
+      - name: Preinstall some bioconductor packages
+        run: |
+          BiocManager::install("BiocVersion")
+          BiocManager::install("BSgenome")
+          BiocManager::install("BSgenome.Hsapiens.UCSC.hg19")
+        shell: Rscript {0}
+          
+      - name: Install remaining dependencies
+        run: |
+          options(repos = c(getOption("repos"), BiocManager::repositories()))
+          remotes::install_deps(dependencies = TRUE)
+          remotes::install_cran("rcmdcheck")
+        shell: Rscript {0}
 
       - uses: r-lib/actions/check-r-package@v1
+        with:
+          error-on: '"error"'
 
       - name: Show testthat output
         if: always()

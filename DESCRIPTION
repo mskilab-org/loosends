@@ -7,26 +7,28 @@ Authors@R:
   ))
 Description: What the package does (one paragraph).
 Remotes: 
-  github::mskilab/gUtils,
-  github::mskilab/gGnome,
-  github::mskilab/gChain,
-  github::mskilab/gTrack,
-  github::mskilab/bamUtils,
-  github::mskilab/RSeqLib,
-  github::mskilab/readsupport,
   bioc::3.10/GenomicRanges,
   bioc::3.10/rtracklayer,
   bioc::3.10/Rsamtools,
+  bioc::3.10/Biostrings,
+  github::mskilab/gUtils,
+  github::mskilab/bamUtils,
+  github::mskilab/RSeqLib,
+  github::mskilab/gChain,
+  github::mskilab/gTrack,
+  github::mskilab/gGnome,
+  github::mskilab/readsupport
 Depends:
-    R (>= 3.5.1),
+    R (>= 4.0.2),
     gUtils
 Imports:
     data.table (>= 1.11),
     bamUtils,
-    gGnome,
-    gTrack,
-    gChain,
     RSeqLib,
+    gChain,
+    gTrack,
+    gGnome,
+    readsupport,
     Biostrings,
     igraph,
     Matrix,
@@ -34,7 +36,6 @@ Imports:
     GenomicRanges,
     rtracklayer,
     Rsamtools,
-    readsupport,
     reshape2,
     BSgenome.Hsapiens.UCSC.hg19,
     stringr
