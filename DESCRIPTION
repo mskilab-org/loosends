@@ -17,7 +17,6 @@ Remotes:
   bioc::3.10/GenomicRanges,
   bioc::3.10/rtracklayer,
   bioc::3.10/Rsamtools,
-  bioc::3.14/BSgenome.Hsapiens.UCSC.hg19,
   bioc::3.10/Biostrings
 Depends:
     R (>= 3.5.1),
