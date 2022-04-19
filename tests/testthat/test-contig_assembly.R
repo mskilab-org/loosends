@@ -40,6 +40,9 @@ test_that(desc = "test contig QC for DUP", code = {
     suppressWarnings(
         expr = {
             dup.calns = add_contig_ctypes(dup.calns)
+            dup.calns[, query.seq := ifelse(strand == "-",
+                                            as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq))),
+                                            seq)]
             dup.qc = qc_contigs(calns = as.data.table(dup.calns),
                                 seed.gr = dup.seed,
                                 unassembled.gr = unassembled.gr,
@@ -63,6 +66,9 @@ test_that(desc = "test contig QC for DEL", code = {
     suppressWarnings(
         expr = {
             del.calns = add_contig_ctypes(del.calns)
+            del.calns[, query.seq := ifelse(strand == "-",
+                                            as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq))),
+                                            seq)]
             del.qc = qc_contigs(calns = del.calns,
                                 seed.gr = del.seed,
                                 unassembled.gr = unassembled.gr,
@@ -86,6 +92,9 @@ test_that(desc = "test contig QC for TRA", code = {
     suppressWarnings(
         expr = {
             tra.calns = add_contig_ctypes(tra.calns)
+            tra.calns[, query.seq := ifelse(strand == "-",
+                                            as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq))),
+                                            seq)]
             tra.qc = qc_contigs(calns = as.data.table(tra.calns),
                                 seed.gr = tra.seed,
                                 unassembled.gr = unassembled.gr,
@@ -109,6 +118,9 @@ test_that(desc = "test contig QC for INV", code = {
     suppressWarnings(
         expr = {
             inv.calns = add_contig_ctypes(inv.calns)
+            inv.calns[, query.seq := ifelse(strand == "-",
+                                            as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq))),
+                                            seq)]
             inv.qc = qc_contigs(calns = as.data.table(inv.calns),
                                 seed.gr = inv.seed,
                                 unassembled.gr = unassembled.gr,
@@ -132,6 +144,9 @@ test_that(desc = "test contig QC for FBI", code = {
     suppressWarnings(
         expr = {
             fbi.calns = add_contig_ctypes(fbi.calns)
+            fbi.calns[, query.seq := ifelse(strand == "-",
+                                            as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq))),
+                                            seq)]
             fbi.qc = qc_contigs(calns = as.data.table(fbi.calns),
                                 seed.gr = fbi.seed,
                                 unassembled.gr = unassembled.gr,
@@ -156,6 +171,9 @@ test_that(desc = "test contig QC for CPX", code = {
     suppressWarnings(
         expr = {
             cpx.calns = add_contig_ctypes(cpx.calns)
+            cpx.calns[, query.seq := ifelse(strand == "-",
+                                            as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq))),
+                                            seq)]
             cpx.qc = qc_contigs(calns = as.data.table(cpx.calns),
                                 seed.gr = cpx.seed,
                                 unassembled.gr = unassembled.gr,
