@@ -2,6 +2,7 @@
     library(optparse)
     library(devtools)
     library(gUtils)
+    library(RSeqLib)
 
     ## do not fail silently!
     options(error = function() {traceback(2); quit("no", 1)})
@@ -12,6 +13,7 @@
             make_option("--tbam", type = "character", help = "Path to tumor bam (required)"),
             make_option("--nbam", type = "character", help = "Path to normal bam (required)"),
             make_option("--ref", type = "character", help = "path to fasta for realignment (required)"),
+            make_option("--concat", type = "character", help = "path to fasta for realignment to satellite and viral regions (required)", default = "/gpfs/commons/home/zchoo/git/loosends/inst/extdata/hg19_loosends/concatenated_references_deduped.fasta"),
             make_option("--loose", type = "character",
                         help = "path to loose ends file - either gGraph/JaBbA output or text file (required)"),
             make_option("--overwrite", type = "logical",
@@ -52,7 +54,8 @@
     loose.ends.fn = paste0(opt$outdir, "/", "loose.ends.rds")
     all.reads.fn = paste0(opt$outdir, "/", "all.reads.rds")
     anchor.fn = paste0(opt$outdir, "/", "anchor.reads.rds")
-    
+    ctypes.anchors.fn = paste0(opt$outdir, "/", "ctypes.anchors.reads.rds")
+    telo.anchors.fn = paste0(opt$outdir, "/", "telomere.anchors.rds")
 
     if (opt$overwrite | !file.exists(loose.ends.fn)) {
         ## read loose end file
@@ -139,11 +142,13 @@
         } else {
             message("Reading loose reads from file")
             reads.dt = readRDS(all.reads.fn)
+            anchor.tmp.dt = reads.dt[(high.mate) & (loose.pair),]
         }
 
         if (opt$overwrite | !file.exists(anchor.fn) | file.info(anchor.fn)$size == 0) {
             if (!nrow(reads.dt)) {
                 message("No loose reads!")
+                anchor.tmp.dt = reads.dt[(high.mate) & (loose.pair),]
                 saveRDS(data.table(), anchor.fn)
             } else {
 
@@ -171,6 +176,8 @@
                     anchor.dt[, tumor := ifelse(track %like% "sample", "tumor", "normal")]
                     anchor.dt[, query.strand := anchor.tmp.dt$strand[query.id]]
                     anchor.dt[, subject.strand := loose.dt$strand[subject.id]]
+                    anchor.dt[, subject.strand := loose.dt$strand[subject.id]]
+                    anchor.dt[, qname := anchor.tmp.dt$qname[query.id]]
 
                     ## flip the strands because the loose ends strands are in "junction orientation"
                     anchor.dt[, forward := query.strand != subject.strand]
@@ -187,6 +194,170 @@
             }
         } else {
             message("anchorlift file already exists!")
+            anchor.dt = readRDS(anchor.fn)
+            anchor.tmp.dt = reads.dt[(high.mate) & (loose.pair),]
+            anchor.dt[, qname := anchor.tmp.dt$qname[as.numeric(as.character(query.id))]]
+        }
+
+        if (opt$overwrite | (!file.exists(ctypes.anchors.fn))) {
+        ## if (TRUE) {
+
+            loose.anchors.dt = reads.dt[(loose.pair) & (high.mate),]
+            loose.mates.dt = reads.dt[(loose.pair) & (!high.mate),]
+
+            if (!loose.mates.dt[, .N]) {
+                message("No loose reads!")
+                viral.anchor.dt = data.table()
+                satellite.anchor.dt = data.table()
+                telomeric.anchor.dt = data.table()
+            } else {
+                ## get all c_types of the low-mappability mate
+                message("Loading reference")
+                concat = RSeqLib::BWA(fasta = opt$concat)
+                mate.alns.dt = as.data.table(concat[loose.mates.dt[, seq]])
+
+                ## add back qnames
+                mate.alns.dt[, qname_old := copy(qname)]
+                mate.alns.dt[, qname := loose.mates.dt$qname[as.numeric(as.character(qname_old))]]
+
+                ## replace sequence
+                mate.alns.dt[, seq := loose.mates.dt$seq[as.numeric(as.character(qname_old))]]
+
+                ## replace original strand
+                mate.alns.dt[, strand := loose.mates.dt$strand[as.numeric(as.character(qname_old))]]
+                
+                ## check for ctypes
+                mate.alns.dt = loosends::add_contig_ctypes(mate.alns.dt)
+
+                ## add unaligned reads
+                unaln.dt = loose.mates.dt[!(qname %in% mate.alns.dt$qname), ]
+                mate.alns.dt = rbind(mate.alns.dt, unaln.dt, fill = TRUE)
+
+                ## add query.seq though it really doesn't matter if the strands are flipped here
+                mate.alns.dt[, query.seq := ifelse(strand == "-",
+                                                   as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(seq))),
+                                                   seq)]
+
+                ## check for telomeres
+                mate.alns.dt = check_contigs_for_telomeres(mate.alns.dt, verbose = verbose)
+
+                ## check specifically for TTAGGG
+                pattern = "TTAGGGTTAGGGTTAGGG"
+                mate.alns.dt[, spec.telomeric := grepl(pattern = pattern, x = seq) |
+                                   grepl(pattern = pattern, x = query.seq)]
+                
+                ctypes.dt = mate.alns.dt[, .(viral = any(c_type %like% "viral", na.rm = TRUE),
+                                             satellite = any(c_type %like% "rep", na.rm = TRUE),
+                                             g_telomeric = any(query_g_telomere, na.rm = TRUE),
+                                             c_telomeric = any(query_c_telomere, na.rm = TRUE),
+                                             spec.telomeric,
+                                             telomeric = any(query_c_telomere |
+                                                             query_g_telomere |
+                                                             aln_c_telomere |
+                                                             aln_g_telomere,
+                                                             na.rm = TRUE)),
+                                         by = qname]
+
+                ctypes.anchors.dt = merge.data.table(anchor.dt[, .(seqnames, start, end, strand, qname,
+                                                                   query.id, subject.id,
+                                                                   track, tumor, query.strand, subject.strand,
+                                                                   forward, somatic)],
+                                                     ctypes.dt,
+                                                     by = "qname")
+
+                saveRDS(ctypes.anchors.dt, ctypes.anchors.fn)
+            }
+        } else {
+            message("cyptes file already exists!")
+        }
+
+        ## if (opt$overwrite | (!file.exists(telo.anchors.fn))) {
+        if (TRUE) {
+            message("Telomere anchorlift!")
+
+            ## checking for loose reads
+            loose.reads.dt = reads.dt[(loose.pair),]
+
+            if (loose.reads.dt[, .N]) {
+                wide.reads.dt = merge.data.table(loose.reads.dt[(high.mate),
+                                                          .(seqnames, start, end, strand,
+                                                            mapq, track, seq, reading.frame, sample,
+                                                            qname)],
+                                                 loose.reads.dt[(!high.mate),
+                                                          .(seqnames, start, end, strand,
+                                                            mapq, track, seq, reading.frame, sample,
+                                                            qname)],
+                                                 by = "qname",
+                                                 suffixes = c(".anchor", ".mate"))
+
+                ## use reading frame - this was the input to the sequencer
+                ## put the sequence back in the reading frame of its high mapq mate
+                wide.reads.dt[is.na(reading.frame.mate), reading.frame.mate := ""]
+                wide.reads.dt[, og.seq := as.character(Biostrings::reverseComplement(Biostrings::DNAStringSet(reading.frame.mate)))]
+
+                ## if the anchor strand is minus, reverse complement it
+                wide.reads.dt[, query.seq := copy(og.seq)]
+
+
+                ## check for G telomeres, specifically
+                wide.reads.dt[, g_telomeres := loosends::find_telomeres(seq = query.seq, gorc = "g")]
+                wide.reads.dt[, c_telomeres := loosends::find_telomeres(seq = query.seq, gorc = "c")]
+
+                ## put reads in coordinates of loose ends
+                alift.gr = anchorlift(subject = dt2gr(loose.dt[, .(seqnames, start, end, strand)]),
+                                      query = dt2gr(wide.reads.dt[, .(seqnames = seqnames.anchor,
+                                                                      start = start.anchor,
+                                                                      end = end.anchor,
+                                                                      strand = strand.anchor)]),
+                                      window = 1e6)
+
+
+                ## transfer annotations
+                alift.dt = as.data.table(alift.gr)
+
+                ## keep original loose end location
+                alift.dt[, loose.end := loose.dt$loose.end[subject.id]]
+
+                ## transfer g and c telomere annotations
+                alift.dt[, g_telomeres := wide.reads.dt$g_telomeres[query.id]]
+                alift.dt[, c_telomeres := wide.reads.dt$c_telomeres[query.id]]
+
+                ## add the read
+                alift.dt[, query.seq := wide.reads.dt$query.seq[query.id]]
+                alift.dt[, og.seq := wide.reads.dt$og.seq[query.id]]
+
+                ## transfer strand annotations
+                alift.dt[, loose.strand := loose.dt$strand[subject.id]]
+                alift.dt[, read.strand := wide.reads.dt$strand.anchor[query.id]]
+                alift.dt[, mate.strand := wide.reads.dt$strand.mate[query.id]]
+
+                ## transfer tumor/normal annotations
+                alift.dt[, tumor := ifelse(wide.reads.dt$track.anchor[query.id] %like% "sample",
+                                            "tumor",
+                                            "normal")]
+
+                ## transfer forward/referse annotations
+                alift.dt[, forward := ifelse(loose.strand != read.strand,
+                                             "forward",
+                                             "reverse")]
+
+                ## transfer germline/somatic annotations
+                alift.dt[, somatic := ifelse(loose.dt$keep[subject.id],
+                                             "somatic",
+                                             "germline")]
+
+                
+
+                
+            } else {
+                message("No loose reads!")
+                alift.dt = data.table()
+            }
+
+            saveRDS(alift.dt, telo.anchors.fn)
+        } else {
+            message("Telomere anchorlift complete!")
+            alift.dt = readRDS(telo.anchors.fn)
         }
         
         message("Done!")
