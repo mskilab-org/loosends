@@ -15,10 +15,11 @@
             make_option("--max.qnames", type = "numeric", help = "max number of qnames", default=1e4),
             make_option("--mix", type = "logical", help = "mix t/n reads before assembly", default=FALSE),
             make_option("--overwrite", type = "logical", help = "overwrite existing analysis", default=FALSE),
-            make_option("--cores", type = "numeric", help = "number of cores", default=1),
             make_option("--minimap", type = "logical", help = "use minimap?", default=FALSE),
             make_option("--maxwin", type = "numeric", help = "max window around loose end to grab reads", default=5e3),
             make_option("--reads", type = "character", help = "data table of reads", default = "/dev/null"),
+            make_option("--recall", type = "logical", help = "re-call?", default = TRUE),
+            make_option("--cores", type = "numeric", help = "number of cores", default = 8),
             make_option("--loose", type = "character", help = "data table of loose ends", default="/dev/null")
         )
         parseobj = OptionParser(option_list=option_list)
@@ -37,6 +38,13 @@
     message("Loading development version of loosends")
     devtools::load_all("~/git/loosends")
     library(gUtils)
+
+    ## output filenames
+    calls.dt.fn = file.path(opt$outdir, "calls.rds")
+    recall.dt.fn = file.path(opt$outdir, "recalls.rds")
+    contigs.dt.fn = file.path(opt$outdir, "contigs.rds")
+    filtered.dt.fn = file.path(opt$outdir, "filtered.rds")
+
 
     ## read loose end file
     if (grepl(".rds", opt$loose, ignore.case = TRUE)) {
@@ -82,100 +90,118 @@
 
         ## load reference from disk
         message("Loading references from disk")
-        ## ref.obj = grab_ref_obj(opt$ref_dir)
 
-        human.ref = paste0(opt$ref_dir, "/human_g1k_v37_decoy.fasta")
-        concat.ref = paste0(opt$ref_dir, "/concatenated_references_deduped.fasta")
+        ## only run if filtered contigs don't already exist
+        if (opt$overwrite || (!file.exists(filtered.dt.fn))) {
 
-        human.bwa = RSeqLib::BWA(human.ref)
-        concat.bwa = RSeqLib::BWA(concat.ref)
+            human.ref = paste0(opt$ref_dir, "/human_g1k_v37_decoy.fasta")
+            concat.ref = paste0(opt$ref_dir, "/concatenated_references_deduped.fasta")
 
-        ## if running minimap, pre-index the fasta to reduce some overhead
-        if (opt$minimap) {
-            message("Indexing minimap reference!")
-            mmi = minimap_index(fasta = concat.ref, outdir = opt$outdir, verbose = TRUE)
+            human.bwa = RSeqLib::BWA(human.ref)
+            concat.bwa = RSeqLib::BWA(concat.ref)
+
+            ## if running minimap, pre-index the fasta to reduce some overhead
+            if (opt$minimap) {
+                message("Indexing minimap reference!")
+                mmi = minimap_index(fasta = concat.ref, outdir = opt$outdir, verbose = TRUE)
+            } else {
+                message("Skipping indexing! Not using minimap.")
+                mmi = concat.ref
+            }
+
+            message("Starting caller")
+            res = mclapply(1:loose.dt[, .N],
+                           function(ix, reads, loose) {
+                               message("Starting analysis for loose end ", ix,
+                                       " of ",
+                                       loose.dt[, .N])
+                               distances = GenomicRanges::distance(loose.ends.gr[ix],
+                                                                   loose.reads.gr,
+                                                                   ignore.strand = TRUE)
+                               qnames = reads[which(distances < opt$maxwin),qname]
+                               n.qnames = length(unique(qnames))
+                               message("Number of unique qnames: ", n.qnames)
+                               if (n.qnames > opt$max.qnames) {
+                                   message("Downsampling to ", opt$max.qnames, " qnames")
+                                   qnames = sample(qnames, size = opt$max.qnames, replace = FALSE)
+                               }
+                               message("Prepping reads...")
+                               this.loose.reads = reads[qname %in% qnames,]
+                               ri = prep_loose_reads(loose[ix,], this.loose.reads)
+                               message("Starting caller!")
+                               call.res = loosends:::call_loose_end2(loose[ix,],
+                                                                     ri,
+                                                                     id = opt$id,
+                                                                     concat.bwa = concat.bwa,
+                                                                     human.bwa = human.bwa,
+                                                                     window = opt$pad,
+                                                                     verbose = (opt$cores == 1))
+                               message("Annotation: ", call.res$label.dt$annotation)
+                               message("Somatic: ", call.res$label.dt$somatic)
+                               return(call.res)
+                           },
+                           loose.reads.dt,
+                           loose.dt,
+                           mc.cores = opt$cores)
+
+            message("Concatenating calls")
+            call.res = lapply(res, function(x) {return(x$label.dt)}) %>%
+                rbindlist(fill = TRUE)
+            contig.res = lapply(res, function(x) {return(x$all.contigs)}) %>%
+                rbindlist(fill = TRUE)
+            filtered.res = lapply(res, function(x) {return(x$keep.tigs.support)}) %>%
+                rbindlist(fill = TRUE)
+
+            call.res[, sample := opt$id]
+
+            if (filtered.res[, .N]) {
+                filtered.res[, sample := opt$id]
+            }
+            message("Saving output")
+            saveRDS(call.res, calls.dt.fn)
+            saveRDS(contig.res, contigs.dt.fn)
+            saveRDS(filtered.res, filtered.dt.fn)
         } else {
-            message("Skipping indexing! Not using minimap.")
-            mmi = concat.ref
+            message("Filtered contigs already exist!!")
+            filtered.res = readRDS(filtered.dt.fn)
         }
-
-        ## res = call_loose_end_wrapper(id = opt$id,
-        ##                              le.dt = loose.dt,
-        ##                              reads.dt = loose.reads.dt,
-        ##                              concat.bwa = concat.bwa,
-        ##                              human.bwa = human.bwa,
-        ##                              concat.fn = mmi,##concat.ref, (use pre-indexed)
-        ##                              pad = opt$pad,
-        ##                              mix.tn = opt$mix,
-        ##                              minimap = opt$minimap,
-        ##                              outdir = opt$outdir,
-        ##                              max.reads = 2e4,
-        ##                              verbose = TRUE)
-
-        message("Starting caller")
-        res = lapply(1:loose.dt[, .N],
-                     function(ix, reads, loose) {
-                         message("Starting analysis for loose end ", ix,
-                                 " of ",
-                                 loose.dt[, .N])
-                         distances = GenomicRanges::distance(loose.ends.gr[ix],
-                                                             loose.reads.gr,
-                                                             ignore.strand = TRUE)
-                         qnames = reads[which(distances < opt$maxwin),qname]
-                         n.qnames = length(unique(qnames))
-                         message("Number of unique qnames: ", n.qnames)
-                         if (n.qnames > opt$max.qnames) {
-                             message("Downsampling to ", opt$max.qnames, " qnames")
-                             qnames = sample(qnames, size = opt$max.qnames, replace = FALSE)
-                         }
-                         message("Prepping reads...")
-                         this.loose.reads = reads[qname %in% qnames,]
-                         ri = prep_loose_reads(loose[ix,], this.loose.reads)
-                         message("Starting caller!")
-                         call.res = loosends:::call_loose_end2(loose[ix,],
-                                                              ri,
-                                                              id = opt$id,
-                                                              concat.bwa = concat.bwa,
-                                                              human.bwa = human.bwa,
-                                                              window = opt$pad,
-                                                              verbose = TRUE)
-                         return(call.res)
-                     },
-                     loose.reads.dt,
-                     loose.dt)
-                     ## mc.cores = 32)##opt$cores)
-
-        message("Concatenating calls")
-        call.res = lapply(res, function(x) {return(x$label.dt)}) %>%
-            rbindlist(fill = TRUE)
-        contig.res = lapply(res, function(x) {return(x$all.contigs)}) %>%
-            rbindlist(fill = TRUE)
-        ## wide.res = lapply(res, function(x) {return(x$wide.contigs)}) %>%
-        ##     rbindlist(fill = TRUE)
-        filtered.res = lapply(res, function(x) {return(x$keep.tigs.support)}) %>%
-            rbindlist(fill = TRUE)
-
-        ## save sample info
-        call.res[, sample := opt$id]
-
-        if (filtered.res[, .N]) {
-            filtered.res[, sample := opt$id]
-        }
-        ## call.res = res$call
-        ## contig.res = res$all.contigs
-        ## filtered.res = res$filtered.contigs
     }
 
+    
 
-    ## output filenames
-    calls.dt.fn = file.path(opt$outdir, "calls.rds")
-    contigs.dt.fn = file.path(opt$outdir, "contigs.rds")
-    filtered.dt.fn = file.path(opt$outdir, "filtered.rds")
+    ## check if filtered contigs should be reprocessed
+    if (opt$overwrite || opt$recall || !file.exists(recall.dt.fn)) {
+        if (loose.dt[, .N]) {
+            reres = lapply(1:loose.dt[, .N],
+                           function(ix, filtered, loose) {
+                               message("Recalling loose end: ", ix)
+                               ## do this based on seed overlaps
+                               if (!is.null(filtered$loose.end)) {
+                                   calns = filtered[(loose.end == loose$loose.end[ix]),]
+                               } else {
+                                   sel = which(parse.gr(filtered[, seed]) %^^%
+                                               (gr.flipstrand(parse.gr(loose[ix, loose.end]) + 5e3)))
+                                   filtered[sel, loose.end := loose$loose.end[ix]]
+                                   calns = filtered[sel,]
+                               }
+                               new.call = loosends::check_contig_concordance(calns = calns)
+                               new.call[, loose.end := loose$loose.end[ix]]
+                               return(new.call)
+                           },
+                           filtered.res,
+                           loose.dt)
+            reres = rbindlist(reres, fill = TRUE)
+            reres[, sample := opt$id]
+        } else {
+            reres = data.table()
+        }
 
-    message("Saving output")
-    saveRDS(call.res, calls.dt.fn)
-    saveRDS(contig.res, contigs.dt.fn)
-    saveRDS(filtered.res, filtered.dt.fn)
+        message("Saving output!")
+        saveRDS(reres, recall.dt.fn)
+        saveRDS(filtered.res, filtered.dt.fn)
+    } else {
+        message("Already re-called!")
+    }
 
     message("Done")
 
