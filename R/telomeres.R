@@ -1,3 +1,61 @@
+#' @name find_telomeres2
+#' @title find_telomeres2
+#'
+#' @param seq (character) vector of sequences
+#' @param verbose (logical) default FALSE
+#'
+#' @return data.table with rows equal to the number of strings in seq and columns
+#' - grtr_canonical
+#' - grtr_noncanonical
+#' - crtr_canonical
+#' - crtr_noncanonical
+#'
+#' which are logical vectors showing whether there is a canonical/noncanonical GRTR/CRTR in each string in seq
+find_telomeres2 = function(seq = character(), verbose = FALSE)
+{
+    if (!length(seq)) {
+        return(data.table(grtr_canonical = logical(),
+                          crtr_canonical = logical(),
+                          grtr_noncanonical = logical(),
+                          crtr_noncanonical = logical()))
+    }
+
+    if (verbose) {message("loading pdicts")}
+    grtr.canonical.pdict = readRDS(system.file("extdata", "g.canonical.pdict.rds", package = "loosends"))
+    crtr.canonical.pdict = readRDS(system.file("extdata", "c.canonical.pdict.rds", package = "loosends"))
+    grtr.noncanonical.pdict = readRDS(system.file("extdata", "g.noncanonical.pdict.rds",
+                                                  package = "loosends"))
+    crtr.noncanonical.pdict = readRDS(system.file("extdata", "c.noncanonical.pdict.rds",
+                                                  package = "loosends"))
+
+    dstring = Biostrings::DNAStringSet(x = seq)
+
+    ## check for perfect matches to telomeres
+    if (verbose) { message("checking for exact telomeric matches") }
+    grtr.canonical.res = Biostrings::vwhichPDict(pdict = grtr.canonical.pdict,
+                                                 subject = dstring,
+                                                 min.mismatch = 0,
+                                                 max.mismatch = 0)
+    crtr.canonical.res = Biostrings::vwhichPDict(pdict = crtr.canonical.pdict,
+                                                 subject = dstring,
+                                                 min.mismatch = 0,
+                                                 max.mismatch = 0)
+    grtr.noncanonical.res = Biostrings::vwhichPDict(pdict = grtr.noncanonical.pdict,
+                                                    subject = dstring,
+                                                    min.mismatch = 0,
+                                                    max.mismatch = 0)
+    crtr.noncanonical.res = Biostrings::vwhichPDict(pdict = crtr.noncanonical.pdict,
+                                                    subject = dstring,
+                                                    min.mismatch = 0,
+                                                    max.mismatch = 0)
+
+    return(data.table(grtr_canonical = base::lengths(grtr.canonical.res) > 0,
+                      crtr_canonical = base::lengths(crtr.canonical.res) > 0,
+                      grtr_noncanonical = base::lengths(grtr.noncanonical.res) > 0,
+                      crtr_noncanonical = base::lengths(crtr.noncanonical.res) > 0))
+                      
+}
+
 #' @name find_telomeres
 #' @title find_telomeres
 #'
