@@ -60,7 +60,7 @@ call_loose_end2 = function(li,
 
     if (verbose) {message("Building contigs")}
     all.tigs = build_contigs_wrapper(gr = gr.flipstrand(dt2gr(le.dt)),
-                                     reads.dt = prepped.reads.dt,
+                                     reads.dt = prepped.reads.dt[(track %like% "sample"),],
                                      ref = concat.bwa,
                                      window = window,
                                      low.mappability.gr = low.mappability.gr,
@@ -158,7 +158,10 @@ check_contig_concordance = function(calns, verbose = FALSE) {
                 res[, complex := TRUE]
                 calns.selection = calns[, (complex) & (high.mapq)]
             } else {
-                calns.selection = rep(TRUE, times = calns[, .N])
+                ## use the highest MAPQ alignment if it is a single breakend
+                tmp = calns[, min.mapq := min(mapq, na.rm = TRUE), by = name]
+                calns.selection = calns[, min.mapq == max(min.mapq, na.rm = TRUE)]
+                ## calns.selection = rep(TRUE, times = calns[, .N])
                 res[, single.breakend := TRUE]
             }
 
@@ -172,6 +175,12 @@ check_contig_concordance = function(calns, verbose = FALSE) {
                        decoy = any(calns[calns.selection, c_type %like% 'decoy'], na.rm = TRUE),
                        human = all(calns[calns.selection, c_type %like% 'human'], na.rm = TRUE),
                        repetitive = any(calns[calns.selection, c_type %like% 'rep'], na.rm = TRUE))]
+
+            ## for single breakends be more stringent about viral alignments
+            ## require a viral alignment in ALL tumor-specific contigs
+            if (res[, single.breakend]) {
+                res[, viral := calns[calns.selection, all(viral, na.rm = TRUE)]]
+            }
 
             ## add how many base pairs are unmappable?
             res[, ":="(proximal.unmappable = median(calns[calns.selection, proximal.unmappable],
@@ -199,9 +208,12 @@ check_contig_concordance = function(calns, verbose = FALSE) {
 
             }
 
-            ## add c_type
+            ## viral sequence annotation
             if (res[(viral), .N]) {
                 res[, viral.breakend := calns[calns.selection & (c_type %like% 'viral'), distal.breakend][1]]
+                if (res[, single.breakend]) {
+                    res[, viral.breakend := calns[calns.selection & (c_type %like% 'viral'),][1, paste0(seqnames, ":", start, "-", end, strand)]]
+                }
             } else {
                 res[, viral.breakend := NA_character_]
             }
@@ -212,15 +224,48 @@ check_contig_concordance = function(calns, verbose = FALSE) {
                 res[, rep.breakend := NA_character_]
             }
 
-            if (calns[, any(query_c_telomere, na.rm = TRUE)] |
-                calns[, any(aln_c_telomere, na.rm = TRUE)] |
-                calns[, any(query_g_telomere, na.rm = TRUE)] |
-                calns[, any(aln_g_telomere, na.rm = TRUE)]) {
-
+            if (calns[calns.selection, any(query_c_telomere, na.rm = TRUE)] |
+                calns[calns.selection, any(query_g_telomere, na.rm = TRUE)]) {
                 res[, telomeric := TRUE]
                 
             } else {
                 res[, telomeric := FALSE]
+            }
+
+            if (calns[calns.selection, any(query_c_telomere, na.rm = TRUE)]) {
+
+                res[, c_telomeric := TRUE]
+                
+            } else {
+                res[, c_telomeric := FALSE]
+            }
+
+            if (calns[calns.selection, any(query_g_telomere, na.rm = TRUE)]) {
+
+                res[, g_telomeric := TRUE]
+                
+            } else {
+                res[, g_telomeric := FALSE]
+            }
+
+            res[, grtr_canonical := FALSE]
+            if (calns[calns.selection, any(grtr_canonical, na.rm = TRUE)]) {
+                res[, grtr_canonical := TRUE]
+            }
+
+            res[, grtr_noncanonical := FALSE]
+            if (calns[calns.selection, any(grtr_noncanonical, na.rm = TRUE)]) {
+                res[, grtr_noncanonical := TRUE]
+            }
+
+            res[, crtr_canonical := FALSE]
+            if (calns[calns.selection, any(crtr_canonical, na.rm = TRUE)]) {
+                res[, crtr_canonical := TRUE]
+            }
+
+            res[, crtr_noncanonical := FALSE]
+            if (calns[calns.selection, any(crtr_noncanonical, na.rm = TRUE)]) {
+                res[, crtr_noncanonical := TRUE]
             }
         }
     }
@@ -237,82 +282,6 @@ check_contig_concordance = function(calns, verbose = FALSE) {
     return(res)
 }
 
-    ## if (verbose) { message("Grabbing contig breakends") }
-    ## keep.tigs.breakends = grab_contig_breakends_wrapper(calns = keep.tigs, verbose = verbose)
-
-    ## if (verbose) { message("Grabbing distal breakends") }
-    ## distal.bps = copy(keep.tigs.breakends)
-    ## final.tigs = copy(keep.tigs)
-    ## if (keep.tigs.breakends[, .N]) {
-    ##     setkey(keep.tigs.breakends, "name")
-    ##     setkey(keep.tigs.support, "name")
-    ##     keep.tigs.breakends = keep.tigs.support[keep.tigs.breakends]
-    ##     distal.bps = grab_distal_breakends(keep.tigs.breakends, specificity.thresh = specificity.thresh)
-    ##     final.tigs = keep.tigs[(name %in% distal.bps[, name]), ]
-    ## }
-
-    ## ## label loose end based on relation to unmappable segment
-    ## proximal.mappable = !(dt2gr(le.dt) %^% (unmappable.gr + unmappable.pad))
-    ## distal.mappable = NA
-    ## clustered = NA
-    ## if (distal.bps[, .N]) {
-    ##     clustered = all(distal.bps[, clustered])
-    ##     if (clustered) {
-    ##         distal.mappable = any(!(dt2gr(distal.bps) %^% (unmappable.gr + unmappable.pad)))
-    ##     } else {
-    ##         distal.mappable = all(!(dt2gr(distal.bps) %^% (unmappable.gr + unmappable.pad)))
-    ##     }
-    ## }
-
-    ## if (verbose) {
-    ##     message("Proximal contig mappable: ", proximal.mappable)
-    ##     message("Distal contig mappable: ", distal.mappable)
-    ##     message("Distal contig breakends clustered: ", clustered)
-    ## }
-
-    ## ## decide whether any contigs align to telomeres
-    ## aln.g.telomere = FALSE
-    ## aln.c.telomere = FALSE
-    ## if (final.tigs[, .N]) {
-    ##     aln.g.telomere = final.tigs[, any(aln_g_telomere)]
-    ##     aln.c.telomere = final.tigs[, any(aln_c_telomere)]
-    ## }
-
-    ## if (verbose) {
-    ##     message("Contig contains G telomere: ", aln.g.telomere)
-    ##     message("Contig contains C telomere: ", aln.c.telomere)
-    ## }
-
-    ## ## develop final table
-    ## category = ifelse(proximal.mappable,
-    ##                   ifelse(distal.mappable, "T0", "T1"),
-    ##                   ifelse(distal.mappable, "T1", "T2"))
-    ## if (is.na(distal.mappable)) {
-    ##     category = "MYS"
-    ## }
-
-    ## if (verbose) { message("Category: ", category) }
-
-    ## call.dt = data.table(loose.end = paste0(le.dt[, seqnames], ":", le.dt[, start], le.dt[, strand]),
-    ##                      alt.contigs = keep.tigs[, .N] > 0, ## any ALT?
-    ##                      supp.contigs = ifelse(keep.tigs.breakends[, .N] > 0,
-    ##                                            keep.tigs.breakends[, any(tumor.count > 0 | normal.count> 0)],
-    ##                                            FALSE), ## any contigs with ANY support?
-    ##                      tumor.spec = final.tigs[, .N] > 0, ## any tumor-specific ALT?
-    ##                      sample = id,
-    ##                      proximal.mappable = proximal.mappable,
-    ##                      distal.mappable = distal.mappable,
-    ##                      clustered = clustered,
-    ##                      aln.g.telomere = aln.g.telomere,
-    ##                      aln.c.telomere = aln.c.telomere,
-    ##                      category = category)
-
-    ## return(list(call = call.dt,
-    ##             contigs = final.tigs,
-    ##             distal.bps = distal.bps,
-    ##             all.bps = keep.tigs.breakends,
-    ##             all.tigs = all.tigs))
-## }
 
 #' @name grab_distal_breakends
 #' @title grab_distal_breakends
