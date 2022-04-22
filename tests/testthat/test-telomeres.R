@@ -21,7 +21,7 @@ test_that(desc = "check C/G telomere detection runs", code = {
                                "TTAGGGTTAGGGTTAGGGTT",
                                "CCCTAACCCTAACCCTAACC",
                                "CCGTAACCCTAACCATAA")
-            dt = find_telomeres2(seq = test.sequences, gorc = "g")
+            dt = find_telomeres2(seq = test.sequences)
             expect_true(all(dt[, grtr_canonical] == c(FALSE, TRUE, FALSE, FALSE)))
             expect_true(all(dt[, crtr_canonical] == c(FALSE, FALSE, TRUE, FALSE)))
             expect_true(all(dt[, grtr_noncanonical] == c(TRUE, FALSE, FALSE, FALSE)))
