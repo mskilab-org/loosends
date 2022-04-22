@@ -33,10 +33,12 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                       forward.seed.frame.dt = grab_seed_frame(reads.dt,
                                                               seed.gr = tiles[ix],
                                                               seq.field = "reading.frame",
+                                                              ##seq.field = "seq", ## seq should represent the original sequence that was mapped? (already RC'ed in sample.spec)
                                                               forward = TRUE)
                       reverse.seed.frame.dt = grab_seed_frame(reads.dt,
                                                               seed.gr = gr.flipstrand(tiles[ix]),
                                                               seq.field = "reading.frame",
+                                                              ##seq.field = "seq",
                                                               forward = FALSE)
                       if (forward.seed.frame.dt[, .N]) {
                           ## if (verbose) { message("Building forward track contigs") }
@@ -145,8 +147,8 @@ check_contigs_for_telomeres = function(calns, verbose = FALSE) {
     if (!calns[, .N]) {
         calns[, ":="(query_c_telomere = logical(),
                      query_g_telomere = logical(),
-                     aln_c_telomere = logical(),
-                     aln_g_telomere = logical(),
+                     ## aln_c_telomere = logical(),
+                     ## aln_g_telomere = logical(),
                      c_telomere = logical(),
                      g_telomere = logical())]
         return(calns)
@@ -154,10 +156,19 @@ check_contigs_for_telomeres = function(calns, verbose = FALSE) {
                      
     calns[, query_c_telomere := find_telomeres(seq = query.seq, gorc = "c")]
     calns[, query_g_telomere := find_telomeres(seq = query.seq, gorc = "g")]
-    calns[, aln_c_telomere := find_telomeres(seq = seq, gorc = "c")]
-    calns[, aln_g_telomere := find_telomeres(seq = seq, gorc = "g")]
+    ## calns[, aln_c_telomere := find_telomeres(seq = seq, gorc = "c")]
+    ## calns[, aln_g_telomere := find_telomeres(seq = seq, gorc = "g")]
     calns[, c_telomere := any(query_c_telomere, na.rm = TRUE), by = qname]
     calns[, g_telomere := any(query_g_telomere, na.rm = TRUE), by = qname]
+
+    ## rbind find telomeres2 result
+    calns = as.data.table(cbind(calns, find_telomeres2(calns[, query.seq])))
+
+    ## check distal part of the contig for telomeres
+    if (!is.null(calns$distal.query.seq)) {
+        dt = find_telomeres2(calns[, distal.query.seq])
+        calns = as.data.table(cbind(calns, dt))
+    }
 
     return(calns)
     
@@ -236,17 +247,6 @@ align_contigs = function(tigs, ref,
     if (length(aln.tigs)) {
         mcols(aln.tigs)[, "query.seq"] = tigs[as.numeric(mcols(aln.tigs)[, "qname"])]
     }
-    ##     mcols(aln.tigs)[, "c_type"] = refseq.dt[as.character(seqnames(aln.tigs)), c_type]
-    ##     mcols(aln.tigs)[, "c_spec"] = refseq.dt[as.character(seqnames(aln.tigs)), c_spec]
-    ##     
-
-    ##     if (verbose) { message("Searching alignments for C and G telomeres") }
-    ##     ## ## does the aligned chunk specifically have a C/G telomere?
-    ##     mcols(aln.tigs)[, "aln_c_telomere"] = find_telomeres(seq = mcols(aln.tigs)[, "seq"], gorc = "c")
-    ##     mcols(aln.tigs)[, "aln_g_telomere"] = find_telomeres(seq = mcols(aln.tigs)[, "seq"], gorc = "g")
-    ##     ## ## does the query overall have a C/G telomere?
-    ##     ## mcols(aln.tigs)[, "query_c_telomere"] = find_telomeres(seq = mcols(aln.tigs)[, "query.seq"], gorc = "c")
-    ##     ## mcols(aln.tigs)[, "query_g_telomere"] = find_telomeres(seq = mcols(aln.tigs)[, "query.seq"], gorc = "g")
 
     ## convert to data table
     aln.tigs.dt = as.data.table(aln.tigs)
@@ -269,27 +269,12 @@ align_contigs = function(tigs, ref,
         if (verbose) {message("Number of unaligned contigs: ", length(unaln.tigs))}
     }
 
-    ## if (aln.tigs.dt[, .N]) {
-
-    ##     if (verbose) { message("Searching query sequences for C and G telomeres") }
-        
-    ##     aln.tigs.dt[, query_c_telomere := find_telomeres(seq = mcols(aln.tigs)[, "query.seq"], gorc = "c")]
-    ##     aln.tigs.dt[, query_g_telomere := find_telomeres(seq = mcols(aln.tigs)[, "query.seq"], gorc = "g")]
-    ## }
-
     if (aln.tigs.dt[, .N]) {
         if (verbose) { message("Annotating primary alignments") }
         aln.tigs.dt[, primary := bamUtils::bamflag(flag)[, "isNotPrimaryRead"] == 0]
         if (primary.only) {
             aln.tigs.dt = aln.tigs.dt[(primary),]
         }
-        ## if (verbose) {
-        ##     message("Checking for alignments to decoy sequences")
-        ## }
-        ## aln.tigs.dt[, decoy := as.character(seqnames) %in% refseq.dt[c_type == "decoy", seqnames]]
-        ## if (remove.decoy) {
-        ##     aln.tigs.dt = aln.tigs.dt[(!decoy)]
-        ## }
     }
 
     return(aln.tigs.dt)
@@ -546,6 +531,8 @@ build_contigs = function(reads.dt, col = "seed.frame", qcol = "qual", max.iter =
 #' Annotates the sequences to which the contig was aligned (e.g. human/viral/etc.)
 #' Identify whether the contig represents an ALT allele
 #'
+#' Expects contigs to have field query.seq representing the query sequence
+#'
 #' Potential ALT alleles include:
 #' - contigs not aligning to the seed region at all
 #' - contigs aligning to the seed region but with a substantial number of unmapped bases
@@ -646,6 +633,7 @@ qc_single_contig = function(calns.dt,
     proximal.unassembled = NA
     distal.unassembled = NA
     distal.foreign = NA ## does the distal part of the contig align to foreign sequence?
+    distal.query.seq = "" ## substring of contig corresponding to distal part
 
     ## decide whether the proximal breakend is unmappable
     proximal.unmappable = seed.gr %o% low.mappability.gr
@@ -654,6 +642,7 @@ qc_single_contig = function(calns.dt,
     proximal.unassembled = seed.gr %o% unassembled.gr
 
     ## classify single chunk contigs with alignments outside the seed region
+    ## add the distal query sequence of single chunk alignments
     if (calns.dt[(single.chunk) & !(unaligned), .N] & keep) {
 
         distal.gr = dt2gr(calns.dt[, .(seqnames, start, end, strand)])
@@ -682,8 +671,13 @@ qc_single_contig = function(calns.dt,
                                 na.rm = TRUE)
 
         distal.foreign = any(!(as.character(seqnames(distal.gr)) %in% as.character(seqnames(low.mappability.gr))), na.rm = TRUE)
+
+        ## query seq is just the entire contig as it aligns in a single chunk outside the seed region
+        distal.query.seq = calns.dt[, query.seq][1]
     }
 
+    ## for contigs that don't align in a single chunk, decide whether or not to keep them
+    ## based on contig cgChain
     if (calns.dt[!(single.chunk) & !(unaligned), .N]) {
         qwidth = calns.dt[qname == qn][, qwidth][1]
         ## generate gChain from contig cigar string
@@ -792,27 +786,20 @@ qc_single_contig = function(calns.dt,
                 }
             }
         }
+
+        ## get the distal query sequence
+        if (fbi | junction | complex) {
+            ## get the start site in contig coordinates of the distal part
+            distal.start = GenomicRanges::start(distal.contig.gr)
+            distal.query.seq = substr(calns.dt[, query.seq][1],
+                                      start = distal.start,
+                                      stop = nchar(calns.dt[, query.seq][1]))
+        } else {
+            ## otherwise just use the whole contig because there are a lot of unmapped bases
+            distal.query.seq = calns.dt[, query.seq][1]
+        }
         
         if (fbi | junction | complex) {
-            ## if (fbi) {
-            ##     if (!is.null(y$outside.stranded.seed)) {
-            ##         distal.gr = y %Q% (outside.stranded.seed)
-            ##     } else {
-            ##         distal.gr = y
-            ##     }
-            ## } else if (junction) {
-            ##     if (!is.null(y$outside.unstranded.seed)) {
-            ##         distal.gr = y %Q% (outside.unstranded.seed)
-            ##     } else {
-            ##         distal.gr = y
-            ##     }
-            ## } else if (complex) {
-            ##     if (!is.null(y$outside.unstranded.seed)) {
-            ##         distal.gr = y %Q% (outside.unstranded.seed)
-            ##     } else {
-            ##         distal.gr = y
-            ##     }
-            ## }
             ## is the distal part of the contig unmappable?
             distal.unmappable = sum(distal.gr %o% low.mappability.gr,
                                     na.rm = TRUE)
@@ -867,12 +854,6 @@ qc_single_contig = function(calns.dt,
             if (junction) {
                 jstring = paste0(proximal.breakend, ",", distal.breakend)
             } else if (complex) {
-                ## if (!is.null(y$outside.unstranded.seed)) {
-                ##     y.distal = y %Q% (outside.unstranded.seed)
-                ## } else {
-                ##     y.distal = y
-                ## }
-                
                 jstring = paste0(proximal.breakend, ",",
                                  paste(grl.string(distal.gr), collapse = ","))
             }
@@ -903,7 +884,8 @@ qc_single_contig = function(calns.dt,
                     proximal.unassembled = proximal.unassembled,
                     distal.unmappable = distal.unmappable,
                     distal.unassembled = distal.unassembled,
-                    distal.foreign = distal.foreign)]
+                    distal.foreign = distal.foreign,
+                    distal.query.seq = distal.query.seq)]
 
     return(calns.dt)
 }
@@ -950,28 +932,3 @@ qc_contigs = function(calns,
 
 }
 
-#' @name find_telomeres
-#' @title find_telomeres
-#'
-#' @param seq (character) vector of sequences
-#' @param gorc (either g, c, or both, input to eighteenmer)
-#' @param verbose (logical) default FALSE
-#'
-#' @return logical with length of seq, indicating whether that sequence contains a c or g telomere
-find_telomeres = function(seq = character(), gorc = "g", verbose = FALSE) {
-
-    if (!gorc %in% c("g", "c", "both")) {
-        stop("Invalid value: gorc must be one of c('g', 'c', 'both')")
-    }
-
-    if (!length(seq)) {
-        return(logical())
-    }
-
-    if (verbose) { message("searching for ", gorc, " telomeres in ", length(seq), " sequences") }
-
-    telomere.query = eighteenmer(gorc = gorc)
-    telomere.subject = Biostrings::DNAStringSet(x = seq)
-    res = vwhichPDict(pdict = telomere.query, subject = telomere.subject, min.mismatch = 0, max.mismatch = 0)
-    return(base::lengths(res) > 0)
-}
