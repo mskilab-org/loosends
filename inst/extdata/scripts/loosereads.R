@@ -176,7 +176,7 @@
                     anchor.dt[, tumor := ifelse(track %like% "sample", "tumor", "normal")]
                     anchor.dt[, query.strand := anchor.tmp.dt$strand[query.id]]
                     anchor.dt[, subject.strand := loose.dt$strand[subject.id]]
-                    anchor.dt[, subject.strand := loose.dt$strand[subject.id]]
+                    anchor.dt[, loose.end := loose.dt$loose.end[subject.id]]
                     anchor.dt[, qname := anchor.tmp.dt$qname[query.id]]
 
                     ## flip the strands because the loose ends strands are in "junction orientation"

@@ -14,7 +14,7 @@
             make_option("--pad", type = "numeric", help = "assembly window (bp)", default=5e3),
             make_option("--max.qnames", type = "numeric", help = "max number of qnames", default=1e4),
             make_option("--mix", type = "logical", help = "mix t/n reads before assembly", default=FALSE),
-            make_option("--overwrite", type = "logical", help = "overwrite existing analysis", default=FALSE),
+            make_option("--overwrite", type = "logical", help = "overwrite existing analysis", default=TRUE),
             make_option("--minimap", type = "logical", help = "use minimap?", default=FALSE),
             make_option("--maxwin", type = "numeric", help = "max window around loose end to grab reads", default=5e3),
             make_option("--reads", type = "character", help = "data table of reads", default = "/dev/null"),
@@ -82,8 +82,8 @@
 
         ## convert reads to GRanges
         if (inherits(loose.reads.dt, 'data.table')) {
-            loose.reads.gr = dt2gr(loose.reads.dt[, .(seqnames, start, end)])
-            loose.ends.gr = dt2gr(loose.dt[, .(seqnames, start, end, sample, leix)])
+            loose.reads.gr = gUtils::dt2gr(loose.reads.dt[, .(seqnames, start, end)])
+            loose.ends.gr = gUtils::dt2gr(loose.dt[, .(seqnames, start, end, sample, leix)])
         } else {
             stop("loose reads must be data.table")
         }
@@ -110,39 +110,39 @@
             }
 
             message("Starting caller")
-            res = mclapply(1:loose.dt[, .N],
-                           function(ix, reads, loose) {
-                               message("Starting analysis for loose end ", ix,
-                                       " of ",
-                                       loose.dt[, .N])
-                               distances = GenomicRanges::distance(loose.ends.gr[ix],
-                                                                   loose.reads.gr,
-                                                                   ignore.strand = TRUE)
-                               qnames = reads[which(distances < opt$maxwin),qname]
-                               n.qnames = length(unique(qnames))
-                               message("Number of unique qnames: ", n.qnames)
-                               if (n.qnames > opt$max.qnames) {
-                                   message("Downsampling to ", opt$max.qnames, " qnames")
-                                   qnames = sample(qnames, size = opt$max.qnames, replace = FALSE)
-                               }
-                               message("Prepping reads...")
-                               this.loose.reads = reads[qname %in% qnames,]
-                               ri = prep_loose_reads(loose[ix,], this.loose.reads)
-                               message("Starting caller!")
-                               call.res = loosends:::call_loose_end2(loose[ix,],
-                                                                     ri,
-                                                                     id = opt$id,
-                                                                     concat.bwa = concat.bwa,
-                                                                     human.bwa = human.bwa,
-                                                                     window = opt$pad,
-                                                                     verbose = (opt$cores == 1))
-                               message("Annotation: ", call.res$label.dt$annotation)
-                               message("Somatic: ", call.res$label.dt$somatic)
-                               return(call.res)
-                           },
-                           loose.reads.dt,
-                           loose.dt,
-                           mc.cores = opt$cores)
+            res = lapply(1:loose.dt[, .N],
+                         function(ix, reads, loose) {
+                             message("Starting analysis for loose end ", ix,
+                                     " of ",
+                                     loose.dt[, .N])
+                             distances = GenomicRanges::distance(loose.ends.gr[ix],
+                                                                 loose.reads.gr,
+                                                                 ignore.strand = TRUE)
+                             ## qnames = reads[which(distances < opt$maxwin),][track %like% "sample",qname]
+                             qnames = reads[which(distances < opt$maxwin),qname]
+                             n.qnames = length(unique(qnames))
+                             message("Number of unique qnames: ", n.qnames)
+                             if (n.qnames > opt$max.qnames) {
+                                 message("Downsampling to ", opt$max.qnames, " qnames")
+                                 qnames = sample(qnames, size = opt$max.qnames, replace = FALSE)
+                             }
+                             message("Prepping reads...")
+                             this.loose.reads = reads[qname %in% qnames,]
+                             ri = prep_loose_reads(loose[ix,], this.loose.reads)
+                             message("Starting caller!")
+                             call.res = loosends:::call_loose_end2(loose[ix,],
+                                                                   ri,
+                                                                   id = opt$id,
+                                                                   concat.bwa = concat.bwa,
+                                                                   human.bwa = human.bwa,
+                                                                   window = opt$pad,
+                                                                   verbose = (opt$cores == 1))
+                             message("Annotation: ", call.res$label.dt$annotation)
+                             message("Somatic: ", call.res$label.dt$somatic)
+                             return(call.res)
+                         },
+                         loose.reads.dt,
+                         loose.dt)
 
             message("Concatenating calls")
             call.res = lapply(res, function(x) {return(x$label.dt)}) %>%
