@@ -190,14 +190,14 @@ test_that(desc = "test contig QC for CPX", code = {
 })
 
 ## check parsing with a viral breakend
-viral.calns.fn = system.file("extdata", "tests", "new_caller_2", "viral.breakends.calns.rds", package = "loosends")
-viral.calns = readRDS(viral.calns.fn)
+## viral.calns.fn = system.file("extdata", "tests", "new_caller_2", "viral.breakends.calns.rds", package = "loosends")
+## viral.calns = readRDS(viral.calns.fn)
 
-test_that(desc = "check contig annotation for viral breakend", code = {
-    suppressWarnings(
-        expr = {
-            viral.res = check_contig_concordance(viral.calns)
-            expect_true(!is.na(viral.res[, viral.breakend]))
-            expect_true(viral.res[, junction])
-        })
-})
+## test_that(desc = "check contig annotation for viral breakend", code = {
+##     suppressWarnings(
+##         expr = {
+##             viral.res = check_contig_concordance(viral.calns)
+##             expect_true(!is.na(viral.res[, viral.breakend]))
+##             expect_true(viral.res[, junction])
+##         })
+## })
