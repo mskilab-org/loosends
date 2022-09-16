@@ -54,6 +54,7 @@
     loose.ends.fn = paste0(opt$outdir, "/", "loose.ends.rds")
     all.reads.fn = paste0(opt$outdir, "/", "all.reads.rds")
     anchor.fn = paste0(opt$outdir, "/", "anchor.reads.rds")
+    discord.fn = paste0(opt$outdir, "/", "discord.reads.rds")
     ctypes.anchors.fn = paste0(opt$outdir, "/", "ctypes.anchors.reads.rds")
     telo.anchors.fn = paste0(opt$outdir, "/", "telomere.anchors.rds")
 
@@ -81,7 +82,11 @@
                 message("Detected data.frame")
                 loose.dt = as.data.table(loose.dt)
             } else if (inherits(loose.dt, 'GRanges')) {
+                message("Detected GRanges!")
                 loose.dt = as.data.table(loose.dt)
+            } else if (inherits(loose.dt, 'GRangesList')) {
+                message("Detected GRangesList!")
+                loose.dt = as.data.table(unlist(loose.dt))
             } else {
                 stop("Invalid file supplied for loose ends")
             }
@@ -143,12 +148,14 @@
             message("Reading loose reads from file")
             reads.dt = readRDS(all.reads.fn)
             anchor.tmp.dt = reads.dt[(high.mate) & (loose.pair),]
+            discord.dt = reads.dt[(!concord),]
         }
 
         if (opt$overwrite | !file.exists(anchor.fn) | file.info(anchor.fn)$size == 0) {
             if (!nrow(reads.dt)) {
                 message("No loose reads!")
                 anchor.tmp.dt = reads.dt[(high.mate) & (loose.pair),]
+                discord.dt = reads.dt[(!concord),]
                 saveRDS(data.table(), anchor.fn)
             } else {
 
@@ -197,6 +204,61 @@
             anchor.dt = readRDS(anchor.fn)
             anchor.tmp.dt = reads.dt[(high.mate) & (loose.pair),]
             anchor.dt[, qname := anchor.tmp.dt$qname[as.numeric(as.character(query.id))]]
+        }
+
+        if (opt$overwrite | !file.exists(discord.fn) | file.info(discord.fn)$size == 0) {
+            if (!nrow(reads.dt)) {
+                message("No loose reads!")
+                anchor.tmp.dt = reads.dt[(high.mate) & (loose.pair),]
+                discord.dt = reads.dt[(!concord),]
+                saveRDS(data.table(), anchor.fn)
+            } else {
+
+                message("anchorlifting discordant pairs")
+                discord.dt = reads.dt[(!concord),]
+                if (!nrow(discord.dt)) {
+                    discord.anchorlift.dt = data.table()
+                } else {
+                    anchor.gr = dt2gr(discord.dt[, .(seqnames, start, end, strand)],
+                                      seqlengths = hg_seqlengths())
+                    loose.gr = dt2gr(loose.dt[, .(seqnames, start, end, strand)],
+                                     seqlengths = hg_seqlengths())
+
+                    ## actually use gUtils anchorlift
+                    discord.anchorlift.gr = gUtils::anchorlift(query = anchor.gr,
+                                                               subject = loose.gr,
+                                                               window = opt$anchorlift_window)
+
+                    discord.anchorlift.dt = as.data.table(discord.anchorlift.gr)
+
+                    
+                    ## add annotations
+                    discord.anchorlift.dt[, sample := discord.dt$sample[query.id]]
+                    discord.anchorlift.dt[, track := discord.dt$track[query.id]]
+                    discord.anchorlift.dt[, tumor := ifelse(track %like% "sample", "tumor", "normal")]
+                    discord.anchorlift.dt[, query.strand := discord.dt$strand[query.id]]
+                    discord.anchorlift.dt[, subject.strand := loose.dt$strand[subject.id]]
+                    discord.anchorlift.dt[, loose.end := loose.dt$loose.end[subject.id]]
+                    discord.anchorlift.dt[, qname := discord.dt$qname[query.id]]
+
+                    ## flip the strands because the loose ends strands are in "junction orientation"
+                    discord.anchorlift.dt[, forward := query.strand != subject.strand]
+
+                    ## add whether the loose end is annotated as 'germline' or 'somatic'
+                    discord.anchorlift.dt[, somatic := NA]
+                    if (!is.null(loose.dt$keep)) {
+                        discord.anchorlift.dt[, somatic := ifelse(loose.dt$keep[subject.id], "somatic", "germline")]
+                    }
+                    
+                }
+
+                saveRDS(discord.anchorlift.dt, discord.fn)
+            }
+        } else {
+            message("anchorlift file already exists!")
+            discord.anchorlift.dt = readRDS(discord.fn)
+            discord.dt = reads.dt[(!concord),]
+            discord.anchorlift.dt[, qname := discord.dt$qname[as.numeric(as.character(query.id))]]
         }
 
         if (opt$overwrite | (!file.exists(ctypes.anchors.fn))) {
@@ -251,12 +313,12 @@
                                              g_telomeric = any(query_g_telomere, na.rm = TRUE),
                                              c_telomeric = any(query_c_telomere, na.rm = TRUE),
                                              spec.telomeric,
-                                             telomeric = any(query_c_telomere |
-                                                             query_g_telomere |
-                                                             aln_c_telomere |
-                                                             aln_g_telomere,
-                                                             na.rm = TRUE)),
+                                             telomeric = any(query_c_telomere | query_g_telomere, na.rm = TRUE)),
                                          by = qname]
+
+                ## make sure that qnames are unique
+                ctypes.dt = unique(ctypes.dt, by = "qname")
+                anchor.dt = unique(anchor.dt, by = "qname")
 
                 ctypes.anchors.dt = merge.data.table(anchor.dt[, .(seqnames, start, end, strand, qname,
                                                                    query.id, subject.id,

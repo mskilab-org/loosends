@@ -13,6 +13,8 @@
 #' @param window (numeric) window in BP for building contigs, default 5e3
 #' @param low.mappability.gr.fn (character) path to low mappability ranges
 #' @param unassembled.gr.fn (character) path to low mappability ranges
+#' @param use.minimap (logical) use minimap instead of BWA? default FALSE
+#' @param outdir (character) path to temporary output file. default ""
 #' @param verbose (logical) default FALSE
 #' @param ... (additional inputs to various helper functions)
 #'
@@ -32,6 +34,8 @@ call_loose_end2 = function(li,
                                                                package = "loosends"),
                            unassembled.gr.fn = system.file("extdata", "assembly.gaps.ranges.rds",
                                                            package = "loosends"),
+                           use.minimap = FALSE,
+                           outdir = "",
                            verbose = FALSE,
                            ...) {
 
@@ -65,6 +69,8 @@ call_loose_end2 = function(li,
                                      window = window,
                                      low.mappability.gr = low.mappability.gr,
                                      unassembled.gr = unassembled.gr,
+                                     outdir = outdir,
+                                     use.minimap = use.minimap,
                                      verbose = verbose)
 
     keep.tigs = copy(all.tigs)
@@ -273,7 +279,12 @@ check_contig_concordance = function(calns, verbose = FALSE) {
     ## add final annotation category
     res[, somatic := ifelse(any.alt, ifelse(somatic.alt, "somatic", "germline"), "no contigs")]
     res[, annotation := ifelse(any.alt, ifelse(junction, "junction", ifelse(complex, "complex", "breakend")), "no contigs")]
-
+    ## new annotation takes into account "somatic" label
+    res[, new.annotation := ifelse(somatic == "somatic", annotation, "no contigs")]
+    ## this new annotation makes labels consistent with the paper
+    ## eg classes are fully mapped, partially mapped, unmapped
+    paper.map = c(somatic = "full", breakend = "partial", complex = "partial", `no contigs` = "unmapped")
+    res[, paper.annotation := paper.map[new.annotation]]
     if (verbose) {
         message("Annotation: ", res$annotation)
         message("Somatic: ", res$somatic)

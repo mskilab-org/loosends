@@ -106,7 +106,6 @@ read_support_wrapper = function(le.dt = data.table(),
                                                 bowtie = bowtie,
                                                 outdir = paste0(outdir, "/", qn), ## different dir per qname
                                                 verbose = verbose)
-                              gc() ## release memory?
                               if (rc[, .N]) {
                                   out = data.table(leix = lx,
                                                    loose.end = this.le[, paste0(seqnames, ":", start, strand)],

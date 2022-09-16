@@ -10,6 +10,8 @@
 #' @param pseudo.contigs (logical) include pseudo-contigs from discordant read clustering? default TRUE
 #' @param low.mappability.gr (GRanges) path to GRanges containing low mappability bases
 #' @param unassembled.gr (GRanges) path to GRanges containing unassembled regions
+#' @param use.minimap (logical) default FALSE
+#' @param outdir (character) default empty vector, temporary output directory to store files from minimap
 #' @param verbose (logical) default FALSE
 #'
 #' @return data.table with contig alignments
@@ -20,6 +22,8 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                                  pseudo.contigs = TRUE,
                                  low.mappability.gr = GRanges(),
                                  unassembled.gr = GRanges(),
+                                 use.minimap = FALSE,
+                                 outdir = "",
                                  verbose = FALSE) {
 
     tiles = unlist(GenomicRanges::slidingWindows(x = gr + window,
@@ -63,7 +67,9 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                           aln.ctigs = align_contigs(ctigs,
                                                     ref,
                                                     verbose = verbose,
-                                                    keep.unaligned = FALSE)
+                                                    keep.unaligned = FALSE,
+                                                    use.minimap = use.minimap,
+                                                    outdir = outdir)
                           aln.ctigs = add_contig_ctypes(aln.ctigs, verbose = verbose)
                           aln.ctigs = check_contigs_for_telomeres(aln.ctigs, verbose = verbose)
                           ## if (verbose) { message("Filtering contigs based on structure") }
@@ -97,7 +103,9 @@ build_contigs_wrapper = function(gr, reads.dt, ref,
                               aln.pseudo.ctigs = align_contigs(pseudo.ctigs,
                                                                ref,
                                                                verbose = verbose,
-                                                               keep.unaligned = FALSE)
+                                                               keep.unaligned = FALSE,
+                                                               use.minimap = use.minimap,
+                                                               outdir = outdir)
                               aln.pseudo.ctigs = add_contig_ctypes(aln.pseudo.ctigs, verbose = verbose)
                               aln.pseudo.ctigs = check_contigs_for_telomeres(aln.pseudo.ctigs, verbose = verbose)
                               ## if (verbose) {message("Filtering pseudo-contigs by structure")}
@@ -231,21 +239,33 @@ add_contig_ctypes = function(calns,
 #' @param refseq.fn (character) path to seqnames annotation file (included)
 #' @param primary.only (logical) default TRUE
 #' @param keep.unaligned (logical) keep unaligend contigs?? default FALSE
+#' @param use.minimap (logical) use minimap instead of BWA to get contig split alignments?
+#' @param outdir (character) path to temporary output file to store minimap alignment BAM
 #' @param verbose (logical) default FALSE
 #'
 #' @return data.table with contig alignment and metadata fields seq, query.seq
 align_contigs = function(tigs, ref,
                          primary.only = TRUE,
                          remove.decoy = TRUE,
-                         keep.unaligned = FALSE,
+                         keep.unaligned = TRUE,
+                         use.minimap = FALSE,
+                         outdir = "",
                          verbose = FALSE) {
 
     if (verbose) { message("Finding reference alignments") }
-    
-    aln.tigs = ref[tigs]
+
+    if (use.minimap) {
+        aln.tigs = minimap_align(unique(tigs), ref@reference, outdir = outdir, verbose = verbose)
+    } else {
+        aln.tigs = ref[tigs]
+    }
     
     if (length(aln.tigs)) {
-        mcols(aln.tigs)[, "query.seq"] = tigs[as.numeric(mcols(aln.tigs)[, "qname"])]
+        if (use.minimap) {
+            mcols(aln.tigs)[, "query.seq"] = unique(tigs)[as.numeric(mcols(aln.tigs)[, "qname"])]
+        } else {
+            mcols(aln.tigs)[, "query.seq"] = tigs[as.numeric(mcols(aln.tigs)[, "qname"])]
+        }
     }
 
     ## convert to data table
@@ -256,7 +276,7 @@ align_contigs = function(tigs, ref,
         if (verbose) {message("Checking for unaligned contigs")}
         unaln.tigs = setdiff(1:length(tigs), aln.tigs.dt[, as.numeric(qname)])
         if (length(unaln.tigs)) {
-            unaln.tigs.dt = data.table(seqnames = NA_character_,
+            unaln.tigs.dt = data.table(seqnames = "*",
                                        start = 1,
                                        end = 0,
                                        cigar = NA_character_,
@@ -745,6 +765,7 @@ qc_single_contig = function(calns.dt,
         ## indicate whether contig is noise or FBI
         fbi = (!outside.unstranded.seed.indicator) & (outside.stranded.seed.indicator) & (distal.nchunks.fbi == 1)
         keep = (fbi) | outside.unstranded.seed.indicator | unmapped.bases.indicator
+        unmapped.bases = unmapped.bases.indicator
 
         ## indicate whether contig represents a junction
         junction = (fbi) | (outside.unstranded.seed.indicator & (distal.nchunks == 1))
@@ -929,6 +950,81 @@ qc_contigs = function(calns,
     })
     clf = rbindlist(clf)
     return(clf)
+
+}
+
+#' @name minimap_align
+#' @title minimap_align
+#'
+#' @param seq (character) character vector of sequences
+#' @param fasta (character) character vector giving path to FASTA
+#' @param outdir (character) temporary output directory
+#' @param verbose (logical) verbosity
+#'
+#' @param GRanges given contig alignments and CIGARs
+minimap_align = function(seq, fasta,
+                         outdir = "",
+                         verbose = FALSE) {
+    if (verbose) message("Using minimap for contig alignment")
+
+    contigs.fasta.fn = file.path(outdir, "contigs.fasta")
+    contigs.aln.bam.fn = paste0(outdir, "/", "contigs.aln.bam")
+    contigs.aln.sorted.bam.fn = paste0(outdir, "/", "contigs.aln.sorted.bam")
+    contigs.aln.sam.fn = paste0(outdir, "/", "contigs.aln.sam")
+
+    ## stash these fuckers
+    if (verbose) message("starting minimap contigs single end alignment")
+    rtracklayer::export(object = stats::setNames(seq, as.character(1:length(seq))),
+                        con = contigs.fasta.fn,
+                        format = "fasta")
+
+    cmd = paste("minimap2 -ax sr --secondary=yes",
+                fasta,
+                contigs.fasta.fn,
+                ">",
+                contigs.aln.sam.fn)
+
+    sys.res = system(cmd)
+    if (sys.res) {
+        file.remove(contigs.aln.sam.fn)
+        stop("Error!")
+    }
+
+    if (verbose) {message("reading SAM output from alignment")}
+
+    if (file.exists(contigs.aln.sam.fn) && file.info(contigs.aln.sam.fn)$size > 0) {
+        cmd = paste("samtools view -Sb", contigs.aln.sam.fn, ">", contigs.aln.bam.fn)
+        sys.res = system(cmd)
+        if (sys.res) {
+            file.remove(contigs.aln.bam.fn)
+            stop("Error!")
+        }
+    } else {
+        return(GRanges()) ## return empty GRanges if there are no contig alignments
+    }
+               
+
+    if (verbose) {message("parsing alignment BAM")}
+    
+    cmd = paste("samtools sort", contigs.aln.bam.fn, ">", contigs.aln.sorted.bam.fn, ";",
+                "samtools index", contigs.aln.sorted.bam.fn)
+    sys.res = system(cmd)
+
+    if (sys.res) {
+        file.remove(contigs.aln.bam.sorted.fn)
+        stop("Error!")
+    }
+
+    aln.gr = bamUtils::read.bam(bam = contigs.aln.sorted.bam.fn,
+                                all = TRUE,
+                                pairs.grl = FALSE,
+                                tag="AS",
+                                isPaired = NA)
+    ralns.og = aln.gr
+
+    if (length(ralns.og)) {
+        ralns.og = ralns.og %Q% (!is.na(qname))
+    }
 
 }
 

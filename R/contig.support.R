@@ -159,7 +159,7 @@ check_distal_only_contig_support = function(calns, reads.dt, ref.pad = 5e3, seed
 #' @param ref (BWA) reference to compare alignment against
 #' @param seed.pad (numeric) number of base pairs around peak to search for supporting reads, default 0
 #' @param verbose (logical) default FALSE
-check_split_contig_support = function(calns, reads.dt, ref, seed.pad = 0, verbose = FALSE) {
+check_split_contig_support = function(calns, reads.dt, ref, seed.pad = 0, verbose = FALSE, return.liftover = FALSE) {
 
     if (verbose) { message("Grabbing contig peak") }
     win = parse.gr(unique(calns[, seed]))
@@ -181,6 +181,10 @@ check_split_contig_support = function(calns, reads.dt, ref, seed.pad = 0, verbos
                                      ref = ref,
                                      cg.contig = cg.contig,
                                      verbose = verbose)
+
+    if (return.liftover) {
+        return(rs)
+    }
 
     window.reads.dt[, supporting := qname %in% rs$qname]
     return(window.reads.dt[(supporting),])

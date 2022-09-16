@@ -16,6 +16,7 @@
 #' @param outdir (character)
 #' @param pad (numeric)
 #' @param mask (character) path to GRanges mask
+#' @param bx (logical) read barcode tag? helpful for linked reads
 #' @param cleanup (logical) remove temporary files? default TRUE
 #' @param verbose (logical)
 #'
@@ -31,6 +32,7 @@ loosereads_wrapper = function(ranges = GRanges(),
                               outdir = "./",
                               pad = 5000,
                               mask = "/dev/null",
+                              bx = FALSE,
                               cleanup = TRUE,
                               verbose = FALSE) {
 
@@ -92,7 +94,9 @@ loosereads_wrapper = function(ranges = GRanges(),
         naln = "/dev/null"
     }
 
-    res = loose.reads2(tbam = tsub, taln = taln, nbam = nsub, naln = naln, id = id, 
+    res = loose.reads2(tbam = tsub, taln = taln, nbam = nsub, naln = naln,
+                       id = id,
+                       bx = bx,
                        filter = FALSE, verbose = verbose)
 
     ## remove temporary files
@@ -183,6 +187,7 @@ has_chr = function(bam) {
 #' @param mask (character) path to GRanges to excluded reads
 #' @param pad (numeric) pad around loose ends
 #' @param mate_pad (numeric) pad around mate windows
+#' @param bx (logical) save barcodes from reads?
 #' @param verbose (logical)
 #'
 #' @return list with names:
@@ -193,6 +198,7 @@ grab_looseread_params = function(gr = GRanges(),
                                  mask = "/dev/null",
                                  pad = 5000,
                                  mate_pad = 150,
+                                 bx = FALSE,
                                  verbose = FALSE) {
 
     empty.res = list(ranges = GRanges(), qnames = character())
@@ -218,9 +224,14 @@ grab_looseread_params = function(gr = GRanges(),
         message("Reading BAM: ", bam)
     }
 
+    if (bx) {
+        tag = c("SA", "BX")
+    } else {
+        tag = "SA"
+    }
     all.reads.grl = bamUtils::read.bam(bam = bam, intervals = loose.gr, pairs.grl = TRUE,
-                                       isDuplicate = NA, isPaired = TRUE, tag = "SA")
-    reads = as.data.table(unlist(all.reads.grl))
+                                       isDuplicate = NA, isPaired = TRUE, tag = tag)
+    reads = as.data.table(unlist(all.reads.grl), use.names = TRUE)
 
     if (!reads[, .N]) {
         if (verbose) {
@@ -240,8 +251,13 @@ grab_looseread_params = function(gr = GRanges(),
         splits$SA = as.character(splits$SA)
         splwin = dunlist(strsplit(splits$SA, ";"))
         spl = unlist(lapply(strsplit(splwin$V1, ","), function(w) paste(w[1], w[2], sep=":")))
-        spl = GRanges(spl)
-        spl.wins = trim(gUtils::gr.reduce(spl + mate_pad) - mate_pad)
+        if (length(spl)) {
+            spl = gUtils::parse.gr(spl)
+            spl.wins = trim(gUtils::gr.reduce(spl + mate_pad) - mate_pad)
+        } else {
+            spl = GRanges()
+            spl.wins = GRanges()
+        }
     } else {
         spl.wins = GRanges()
     }
@@ -284,8 +300,13 @@ grab_looseread_params = function(gr = GRanges(),
         }
     }
     qnames = unique(reads[, qname])
+    if (bx) {
+        barcodes = unique(reads[, BX])
+    } else {
+        barcodes = c()
+    }
 
-    return(list(ranges = windows, qnames = qnames))
+    return(list(ranges = windows, qnames = qnames, barcodes = barcodes))
 }
 
 #' @name grab_loosereads
@@ -428,6 +449,7 @@ realign_loosereads = function(bam,
         stop("Error!")
     }
 
+    ## TIL NEGATIVE STRAND READS ARE AUTOMATICALLY REVERSE-COMPLEMENTED
     cmd = paste("samtools fastq -N ", sorted.fn, ">", fastq.fn)
     if (verbose) {
         message("Making fastq")
@@ -527,11 +549,12 @@ realign_loosereads = function(bam,
 #' @param naln (character) optional, realigned normal bam
 #' @param id (character)
 #' @param filter (logical) return loose read pairs only? default FALSE
+#' @param bx (logical) read barcode flag? default FALSE
 #' @param verbose optional, default=FALSE
 #'
 #' @return data.table of reads relaigned to the specified reference
 #' @export
-loose.reads2 = function(tbam, taln, nbam=NA, naln=NA, id="", filter=FALSE, verbose=FALSE){
+loose.reads2 = function(tbam, taln, nbam=NA, naln=NA, id="", filter=FALSE, bx=FALSE, verbose=FALSE){
     treads = .sample.spec2(tbam, verbose = verbose)
     realn = parse_realignment(treads, aln_bam = taln, filter = filter, verbose = verbose)
     realn$sample = id
@@ -555,10 +578,11 @@ loose.reads2 = function(tbam, taln, nbam=NA, naln=NA, id="", filter=FALSE, verbo
 #' @param reads (GRanges) reads from .sample_spec
 #' @param aln_bam (character) bam realigned to reference
 #' @param filter (logical) default FALSE
+#' @param mapq.thresh (numeric) threshold on mapq value for discordant/loose pairs, default 40
 #' @param verbose (logical) default FALSE
 #'
 #' @return data.table of realigned reads
-parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
+parse_realignment = function(reads, aln_bam, filter = FALSE, mapq.thresh = 40, verbose = FALSE) {
     if (verbose) {
         message("Reading realigned reads from: ", aln_bam)
     }
@@ -601,6 +625,9 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
     aln.reads[minus.strand.ix, reading.frame := as.character(reverseComplement(DNAStringSet(reading.frame)))]
 
     ## for each aligned read, get the index of the original read and store as query.id
+    ## seq in reads.dt has been flipped to match the exact readout to the sequencer
+    ## and NOT the reference sequence to which it was aligned
+    ## therefore, reading.frame must also be flipped as done above
     qid = match(paste(aln.reads$qname, aln.reads$reading.frame), paste(reads.dt$qname, reads.dt$seq))
     ## paste(reads.dt$qname, reads.dt$R1, sep = "_"))
     aln.reads = aln.reads[, query.id := qid][!is.na(query.id)]
@@ -632,7 +659,7 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
     realn = realn[, cols, with=F]
 
     ## annotate whether the read belongs to a loose read pair
-    lqn = realn[mapq>50 & (is.na(MQ) | MQ < 1), qname]
+    lqn = realn[mapq>mapq.thresh & (is.na(MQ) | MQ < 1), qname]
     if(filter){
         realn = realn[qname %in% lqn,]
         realn[, loose.pair := TRUE]
@@ -641,7 +668,8 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
     }
     ## mapq is the probability of given read aligning
     ## MQ is mapq of the mate
-    realn[, high.mate := mapq>50 & (is.na(MQ) | MQ < 1)]
+    
+    realn[, high.mate := mapq>mapq.thresh & (is.na(MQ) | MQ < 1)]
 
     ## annotate whether the pair is discordant
     realn[, concord := !(loose.pair) &
@@ -652,7 +680,7 @@ parse_realignment = function(reads, aln_bam, filter = FALSE, verbose = FALSE) {
                 min(start) + 3e3 > max(start), by=qname]
 
     ## annotate which is anchor
-    realn[, anchor := (loose.pair & high.mate) | ( !(loose.pair) & mapq > 50 & !(concord))]
+    realn[, anchor := (loose.pair & high.mate) | ( !(loose.pair) & mapq > mapq.thresh & !(concord))]
     return(realn)
 }
 
