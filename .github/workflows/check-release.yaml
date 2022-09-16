@@ -46,7 +46,7 @@ jobs:
           name: ${{ runner.os }}-r${{ matrix.config.r }}-results
           path: check
 
-    - name: manual debugging
-      if: failure()
-      uses: mxschmitt/action-tmate@v3
+      - name: manual debugging
+        if: failure()
+        uses: mxschmitt/action-tmate@v3
 
