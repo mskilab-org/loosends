@@ -30,6 +30,10 @@ jobs:
           extra-packages: rcmdcheck
           error-on: '"error"'
 
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+	  error-on: '"error"'
+
       - name: Show testthat output
         if: always()
         run: find check -name 'testthat.Rout*' -exec cat '{}' \; || true
