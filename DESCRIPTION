@@ -7,25 +7,43 @@ Authors@R:
   ))
 Description: What the package does (one paragraph).
 Remotes: 
-  github::mskilab/gUtils,
   bioc::3.10/GenomicRanges,
+  bioc::3.10/rtracklayer,
+  bioc::3.10/Rsamtools,
+  bioc::3.10/Biostrings,
+  github::mskilab/gUtils,
+  github::mskilab/bamUtils,
+  github::mskilab/RSeqLib,
+  github::mskilab/gChain,
+  github::mskilab/gTrack,
+  github::mskilab/gGnome,
+  github::mskilab/readsupport
 Depends:
-    R (>= 3.5.1),
+    R (>= 4.0.2),
+    gUtils
+Imports:
     data.table (>= 1.11),
+    bamUtils,
+    RSeqLib,
+    gChain,
+    gTrack,
     gGnome,
+    readsupport,
+    Biostrings,
     igraph,
     Matrix,
-    gTrack,
-    gUtils,     
     reshape2,
     GenomicRanges,
-    Biostrings,
-    RSeqLib,
-    bamUtils,
-    gChain,
-    BSgenome.Hsapiens.UCSC.hg19
+    rtracklayer,
+    Rsamtools,
+    reshape2,
+    BSgenome.Hsapiens.UCSC.hg19,
+    stringr
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.1.1
+RoxygenNote: 7.1.2
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
